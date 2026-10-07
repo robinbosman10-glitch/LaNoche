@@ -1,3 +1,4 @@
+import { getMembers } from './member-cache.js';
 import { EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import { settings } from './settings.js';
 import { branded } from './embeds.js';
@@ -29,7 +30,7 @@ export async function updateMemberlist(guild, store, requestedChannel) {
     const channel = await guild.channels.fetch(channelId);
     const send = channel?.isThread() ? PermissionFlagsBits.SendMessagesInThreads : PermissionFlagsBits.SendMessages;
     if (!channel?.send || !channel.permissionsFor(guild.members.me)?.has([PermissionFlagsBits.ViewChannel,send,PermissionFlagsBits.EmbedLinks,PermissionFlagsBits.AttachFiles,PermissionFlagsBits.ReadMessageHistory])) throw new UserError('Ik mis rechten in het ledenlijst-kanaal (inclusief berichtgeschiedenis lezen).');
-    const members = await guild.members.fetch();
+    const members = await getMembers(guild);
     await guild.roles.fetch();
     if (settings.ranks.some(id=>!guild.roles.cache.has(id))) throw new UserError('Eén of meer ingestelde gangrangen bestaan niet in deze server.');
     const pages = listDescriptions(members,settings.ranks);

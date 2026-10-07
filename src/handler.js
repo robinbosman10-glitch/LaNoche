@@ -1,3 +1,4 @@
+import { getMembers } from './member-cache.js';
 import { ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags, PermissionFlagsBits, escapeMarkdown } from 'discord.js';
 import { definitions } from './commands.js';
 import { settings } from './settings.js';
@@ -105,7 +106,7 @@ async function submitAbsence(i, store) {
 }
 async function inactivity(i, store) {
   const channel = await channelFor(i.guild, i.channelId);
-  const members = await i.guild.members.fetch();
+  const members = await getMembers(i.guild);
   const rows = [...members.values()].filter(m=>!m.user.bot && (!settings.ranks.length || settings.ranks.some(id=>m.roles.cache.has(id))))
     .map(m=>({member:m,last:store.last(i.guildId,m.id),absence:store.absent(i.guildId,m.id)}))
     .sort((a,b)=>(a.last??0)-(b.last??0));
@@ -125,8 +126,9 @@ async function inactivity(i, store) {
 }
 async function applications(i, store) {
   return withLock(`${i.guildId}:applications`, async()=>{
-    const saved = store.panel(i.guildId);
-    const channel = await channelFor(i.guild, saved?.channel || i.channelId);
+    let saved = store.panel(i.guildId);
+    if (saved?.channel !== settings.channels.sollistatus) saved = null;
+    const channel = await channelFor(i.guild, settings.channels.sollistatus);
     const payload = branded('✦ SOLLICITATIES ZIJN GEOPEND', '**LA NOCHE ZOEKT VERSTERKING**\n\nBen jij loyaal, actief en klaar om samen iets op te bouwen? Laat zien wat je in huis hebt en zet de volgende stap bij La Noche.', [field('Wat we zoeken','◆ Actieve leden die afspraken nakomen\n◆ Respect en loyaliteit naar de familie\n◆ Goede communicatie en sterke roleplay',false),field('Interesse?','Neem contact op met de leiding voor een sollicitatie. Vertel wie je bent, wat je ervaring is en waarom jij bij La Noche past.',false),field('Status','🟢 OPEN — nieuwe sollicitaties zijn welkom',false)]);
     payload.content = '<@&1553520983628062810>';
     payload.allowedMentions = { parse: [], roles: ['1553520983628062810'] };

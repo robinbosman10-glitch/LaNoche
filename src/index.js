@@ -1,3 +1,4 @@
+import { invalidateMembers } from './member-cache.js';
 import { existsSync } from 'node:fs';
 import { Client, Events, GatewayIntentBits, MessageFlags, ActivityType } from 'discord.js';
 import { commands } from './commands.js';
@@ -53,6 +54,12 @@ client.on(Events.InteractionCreate, async interaction => {
       else if (!interaction.replied) await interaction.reply({ content, flags: MessageFlags.Ephemeral });
     } catch (replyError) { logError('Foutmelding versturen mislukt', replyError); }
   }
+});
+client.on(Events.ShardReady, shardId => {
+  for (const guild of client.guilds.cache.values()) {
+    if (guild.shardId === shardId) invalidateMembers(guild);
+  }
+  liveRefresh?.schedule();
 });
 function relevantMember(member) { return member.guild.id === config.guildId && settings.ranks.some(id=>member.roles.cache.has(id)); }
 client.on(Events.GuildMemberUpdate, (before, after) => {

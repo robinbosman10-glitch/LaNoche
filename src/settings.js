@@ -1,5 +1,6 @@
 export const settings = {
   channels: {
+    sollistatus: '1553516146773463162',
     ledenlijst: '1553516111176138852',
     aangenomen: '1557288102286987274',
     afwezig: '1553517123844706435',
