@@ -128,6 +128,8 @@ async function applications(i, store) {
     const saved = store.panel(i.guildId);
     const channel = await channelFor(i.guild, saved?.channel || i.channelId);
     const payload = branded('✦ SOLLICITATIES ZIJN GEOPEND', '**LA NOCHE ZOEKT VERSTERKING**\n\nBen jij loyaal, actief en klaar om samen iets op te bouwen? Laat zien wat je in huis hebt en zet de volgende stap bij La Noche.', [field('Wat we zoeken','◆ Actieve leden die afspraken nakomen\n◆ Respect en loyaliteit naar de familie\n◆ Goede communicatie en sterke roleplay',false),field('Interesse?','Neem contact op met de leiding voor een sollicitatie. Vertel wie je bent, wat je ervaring is en waarom jij bij La Noche past.',false),field('Status','🟢 OPEN — nieuwe sollicitaties zijn welkom',false)]);
+    payload.content = '<@&1553520983628062810>';
+    payload.allowedMentions = { parse: [], roles: ['1553520983628062810'] };
     let message;
     if (saved) {
       try { message = await channel.messages.fetch(saved.message); }
