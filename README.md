@@ -1,51 +1,41 @@
 # La Noche Discord-bot
 
-Nieuwe botbasis met alle 10 commands uit de aangeleverde screenshots. **Dit is fase 1: de commands zijn registreerbaar, maar hun functies zijn nog niet gekoppeld of geïmplementeerd.** Elk command geeft een privébericht met wat nog ingesteld moet worden. Er worden nog geen rollen gewijzigd, tickets geopend, afwezigheden opgeslagen of activiteiten bijgehouden.
+Discord-bot met La Noche-logo, zwarte/oranje banner en Nederlandse embeds.
 
-| Command | Bedoeling | Toegang in deze basis |
-| --- | --- | --- |
-| `/aangenomen` | Iemand aannemen op de proefrang | Beheerder |
-| `/afwezig` | Eigen afwezigheid melden, DD-MM-YYYY | Iedereen |
-| `/demote` | Naar een lagere gangrang zetten | Beheerder |
-| `/discordinactief` | Activiteit en afwezigheid bekijken | Beheerder |
-| `/ledenlijst` | Automatische ledenlijst plaatsen/bijwerken | Beheerder |
-| `/ontslaan` | Rollen verwijderen, één uitzonderingsrol behouden | Beheerder |
-| `/promotie` | Naar een hogere gangrang zetten | Beheerder |
-| `/rolaanvraag` | Een rol aanvragen voor een ganglid | Iedereen |
-| `/sollistatus` | Sollicitatiestatus-embeds bijwerken | Beheerder |
-| `/ticket-panel` | Ticketpaneel plaatsen | Beheerder |
+## Commands
 
-De commandnamen zijn exact overgenomen. Argumenten, formulieren en definitieve toegang per rol voegen we toe zodra de gewenste werking is afgesproken.
+- `/aangenomen persoon [reden]`: geeft rollen `1314658388914864218` en `1311587016928133160`, melding in `1557288102286987274`. Blokkeert bestaande hogere gangrangen.
+- `/afwezig`: eigen formulier met reden, begin- en einddatum (DD-MM-YYYY). Registreert direct en plaatst embed in `1553517123844706435`. Geen goedkeuring/afwezigheidsrol ingesteld. Datums zijn inclusief, Europe/Amsterdam; dubbele actuele meldingen worden geblokkeerd. De status verloopt vanzelf.
+- `/demote persoon [reden]`: één gangrang omlaag; melding in het commandkanaal.
+- `/promotie persoon [reden]`: één gangrang omhoog; melding in `1553516833632555029`.
+- `/ontslaan persoon [reden]`: verwijdert alle verwijderbare rollen behalve `1553520983628062810`; melding in `1553516886199771216`. De uitzonderingsrol wordt behouden als het lid die al heeft. @everyone en door Discord beheerde rollen kunnen niet worden verwijderd. Als een gewone rol niet bewerkbaar is, wordt de actie vooraf gestopt.
+- `/discordinactief`: plaatst activiteit en afwezigheidsstatus van gangleden in het commandkanaal. Laatste gemeten bericht, geen verzonnen historie. Telt alleen berichten in zichtbare kanalen terwijl de bot online is; geen berichtinhoud opgeslagen. De reden van afwezigheid komt niet in dit overzicht.
+- `/ledenlijst`: plaatst de lijst in het vaste kanaal `1553516111176138852`, daarna wordt dezelfde lijst bijgewerkt, ongeacht waar het command wordt uitgevoerd. Alle 12 rangen van hoog naar laag, leden per rang, lege rangen tonen *Geen Leden op de rang!*. Live verversing bij rol-/lidwijzigingen, binnenkomst en vertrek (wijzigingen worden circa 1,5 seconde gebundeld), plus iedere 5 minuten als vangnet en na herstart. Grote lijsten worden verdeeld over berichten.
+- `/sollistatus`: plaatst bij eerste gebruik het sollicitatiebericht in het huidige kanaal. Volgende keren wordt hetzelfde bericht bijgewerkt. Sollicitaties staan open; geïnteresseerden worden naar de leiding verwezen tot het ticketpaneel is ingericht.
+- `/rolaanvraag` en `/ticket-panel`: nog niet gekoppeld.
 
-## Starten op Railway
+Alle beheercommands vereisen voorlopig Administrator (ook in de runtime). `/afwezig` en het nog niet gekoppelde `/rolaanvraag` zijn voor leden. De hoogste/laagste rang heeft geen verdere promotie/demote. Iemand met meerdere gangrangen moet eerst gecorrigeerd worden. Beheerders kunnen zichzelf en leden op of boven hun eigen hoogste rol niet wijzigen; de servereigenaar is uitgezonderd van die laatste vergelijking. De bot moet het doelwit altijd kunnen beheren.
 
-1. Maak een nieuwe Railway-service via GitHub met `robinbosman10-glitch/LaNoche`.
-2. Voeg bij **Variables** `DISCORD_TOKEN` (token van de nieuwe bot) en `GUILD_ID` (Discord server-ID) toe. Deel het token niet in de chat of GitHub.
-3. Nodig de nieuwe applicatie uit in die server met de scopes `bot` en `applications.commands`. Voor deze eerste basis zijn geen beheerrechten of privileged intents voor de bot nodig.
-4. Deploy de service. De Dockerfile installeert de dependencies en start de bot. Een domein of webpoort is niet nodig.
-5. Controleer de logs op `La Noche online ... 10 commands geregistreerd.`
+## Railway instellen
 
-De Application ID wordt automatisch bepaald via de ingelogde bot. Gebruik de eigen nieuwe botapplicatie: bij elke start wordt de volledige server-commandlijst van die applicatie gesynchroniseerd met deze 10 commands. Andere botapplicaties worden niet geraakt. Gebruik één replica. Zolang de variabelen ontbreken, stopt de bot met een duidelijke foutmelding.
+1. Koppel deze GitHub-repository en deploy met de Dockerfile.
+2. Voeg Variables toe: `DISCORD_TOKEN` en `GUILD_ID`. Deel het token niet in chat of GitHub.
+3. **Maak een Railway-volume met mount path `/data`**. De SQLite-database bewaart activiteit, afwezigheidsdatums en bericht-ID's. Zonder volume gaat die informatie bij een nieuwe deployment verloren. De Dockerfile stelt `DATA_DIR=/data` in. Gebruik één replica.
+4. Zet in Discord Developer Portal > Bot **Server Members Intent** aan. Message Content Intent en Presence Intent zijn niet nodig.
+5. Nodig de bot uit met scopes `bot` en `applications.commands`. Geef **Beheer rollen**, **Kanalen bekijken**, **Berichten versturen**, **Links insluiten**, **Bestanden bijvoegen** en **Berichtgeschiedenis lezen**. Voor threads ook **Berichten in threads versturen**.
+6. Zet de botrol boven alle gangrangen en alle andere rollen die bij ontslag verwijderd moeten worden.
+7. Controleer logs op `La Noche online ... 10 commands geregistreerd.`
+
+Bij elke start worden de 10 commands voor deze botapplicatie in de opgegeven server gesynchroniseerd. Gebruik de nieuwe, eigen La Noche-applicatie. Publieke meldingen worden alleen verstuurd bij het uitvoeren van de betreffende commands of bij het verversen van de reeds geplaatste ledenlijst. Er worden geen automatische pings verstuurd.
 
 ## Lokaal
 
-Gebruik Node.js 24 (minimaal 24.0.0).
+Node.js 24+, `npm ci`, kopieer `.env.example` naar `.env`, vul token/server-ID in, zet `DATA_DIR=./data`, `npm test`, `npm start`.
 
-```sh
-npm ci
-cp .env.example .env
-# Vul .env in
-npm test
-npm start
-```
+## Configuratie en assets
 
-## Later koppelen
+`src/settings.js`: kanaal-ID's, aangenomen-rollen, uitzonderingsrol en de 12 rang-ID's intern van laag naar hoog.
 
-- Gangrangen in volgorde, proefrang en extra rollen bij aannemen.
-- Rollen die elk command mogen gebruiken en de uitzonderingsrol bij ontslag.
-- Kanalen voor HR-meldingen, aanvragen, afwezigheden en ledenlijst.
-- Ticketcategorieën, supportrollen en sollicitatievragen/statussen.
-- Logo, banner, kleuren en gewenste embedteksten.
-- Permanente opslag en aanvullende intents voor de uiteindelijke functies.
+`assets/logo.png`: het originele aangeleverde logo. `assets/banner.png`: de bijpassende statische banner, gemaakt met de ingebouwde imagegen-tool. Prompt: premium brede La Noche Discord-banner, aangeleverd oranje logo, zwart getextureerde achtergrond, oranje neonranden, rook en vonken; alleen tekst LA NOCHE. De banner is statisch, geen GIF.
 
-`src/commands.js` bevat de commandlijst; `src/handler.js` de voorlopige antwoorden; `src/index.js` regelt de verbinding en registratie. De runtime controleert beheerdersrechten ook zelf. Pas dit samen met de commandpermissies aan wanneer aparte staffrollen worden gekoppeld.
+Tests controleren ranggrenzen, behoud van rollen, datums, opslag over herstarts, lijstpaginering en toegangscontrole. Live Discord-acties vereisen de hostingconfiguratie en zijn niet vanuit deze ontwikkelomgeving uitgevoerd.

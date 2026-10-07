@@ -25,15 +25,11 @@ test('privileged command rejects ordinary members', async () => {
   assert.match(result.content, /beheerdersrechten/);
   assert.equal(result.flags, MessageFlags.Ephemeral);
 });
-test('all commands honestly report pending setup to authorized users', async () => {
-  for (const command of commands) {
-    const result = await handleInteraction(interaction(command.name, true), guild);
-    assert.match(result.embeds[0].toJSON().title, /Nog niet ingesteld/);
-    assert.equal(result.flags, MessageFlags.Ephemeral);
-  }
-});
-test('afwezig is accessible without admin, and wrong guilds are rejected', async () => {
-  assert.ok((await handleInteraction(interaction('afwezig'), guild)).embeds);
-  assert.match((await handleInteraction(interaction('afwezig', false, null), guild)).content, /alleen beschikbaar/);
-  assert.match((await handleInteraction(interaction('afwezig', true, '999999999999999999'), guild)).content, /alleen beschikbaar/);
+test('afwezig opens a form and wrong guilds are rejected', async () => {
+  const i=interaction('afwezig'); i.showModal=async modal=>modal.toJSON();
+  const result=await handleInteraction(i,guild);
+  assert.equal(result.custom_id,'lanoche:afwezig');
+  assert.equal(result.components.length,3);
+  assert.match((await handleInteraction(interaction('afwezig',false,null),guild)).content,/alleen beschikbaar/);
+  assert.match((await handleInteraction(interaction('afwezig',true,'999999999999999999'),guild)).content,/alleen beschikbaar/);
 });

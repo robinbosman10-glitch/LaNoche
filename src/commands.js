@@ -19,5 +19,9 @@ export const commands = definitions.map(command => {
     .setName(command.name)
     .setDescription(command.description);
   if (command.adminOnly) builder.setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
+  if (['aangenomen', 'ontslaan', 'promotie', 'demote'].includes(command.name)) {
+    builder.addUserOption(option => option.setName('persoon').setDescription('Het ganglid').setRequired(true));
+    builder.addStringOption(option => option.setName('reden').setDescription('Toelichting bij deze wijziging').setMaxLength(700));
+  }
   return builder.toJSON();
 });
