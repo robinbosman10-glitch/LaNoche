@@ -55,7 +55,7 @@ Voer na deployment `/ticket-panel` uit in het gewenste tekstkanaal. Het paneel g
 | Drugs inkoop / verkoop | 1557639006991155271 | 1311585567921934367 |
 | WitWas | 1557639163807932516 | 1384749084694286356 |
 
-- Eén open ticket per gebruiker. Privétoegang voor de aanvrager, behandelrol, bot en serverbeheerders.
+- Maximaal twee open tickets per gebruiker, over alle ticketsoorten samen. Gesloten, verwijderde of handmatig weggehaalde ticketkanalen tellen niet mee. Privétoegang voor de aanvrager, behandelrol, bot en serverbeheerders.
 - Het eerste ticketbericht heeft Claimen, Unclaimen en Sluiten. Het wordt indien mogelijk vastgepind. Alleen de behandelaar of een beheerder kan een claim vrijgeven.
 - Sluiten vraagt bevestiging, maakt het ticket alleen-lezen voor de aanvrager en bewaart het gesprek. Een serverbeheerder behoudt zijn Discord-bevoegdheden.
 - Ticketgegevens en claims blijven behouden in de SQLite-database; gebruik het bestaande Railway-volume op `/data`.
@@ -65,3 +65,14 @@ Botrechten: Kanalen bekijken/beheren, Rollen beheren (kanaalrechten aanpassen), 
 Validatie: `npm test`; Discord-livecontrole gebeurt na deployment met een gewoon lid en een behandelaar.
 
 Bestaand paneel vernieuwen na deployment: voer `/ticket-panel` opnieuw uit in hetzelfde kanaal; de opgeslagen bericht-ID voorkomt een dubbel paneel. Andere meldingen behouden hun bestaande banner.
+
+
+### Ticketlogo, meldingen en verwijderen
+
+Het ronde logo in het ticketpaneel en ticketembeds is nu `assets/ticket-logo.gif` (vier seconden, 60 frames). Het betreft het embedlogo, niet de Discord-accountavatar van de bot.
+
+Bij het openen staat uitsluitend de ingestelde behandelrol in de berichttekst met een expliciete mention-allowlist. Meteen na verzenden wordt alleen de tekst leeggemaakt; de embed, animaties en knoppen blijven staan. De bot krijgt in het ticket een expliciete Mention Everyone-permissie om ook niet-vermeldbare behandelrollen te kunnen pingen. Discord-notificatie-instellingen van ontvangers blijven van toepassing.
+
+`$delete` is een tekstcommando en wordt niet als slashcommand geregistreerd. Het werkt uitsluitend in geregistreerde tickets, ook gesloten tickets, voor de ingestelde behandelrol en beheerders. De invoer wordt indien mogelijk verwijderd. Een bevestigingsknop is 60 seconden geldig en kan alleen door de aanvrager worden gebruikt; bevoegdheden worden opnieuw gecontroleerd. Bevestigen verwijdert het kanaal definitief, zonder transcript.
+
+Voor `$delete`: Discord Developer Portal → applicatie → Bot → Privileged Gateway Intents → Message Content Intent aanzetten, opslaan en bot herstarten. Bij opstart controleert de bot de application flags. Als het intent niet beschikbaar is, start de rest van de bot zonder dit tekstcommando door en verschijnt een melding in de logs.

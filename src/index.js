@@ -1,7 +1,7 @@
-import { handleTicketInteraction } from './tickets.js';
+import { handleTicketInteraction, handleTicketMessage } from './tickets.js';
 import { invalidateMembers } from './member-cache.js';
 import { existsSync } from 'node:fs';
-import { Client, Events, GatewayIntentBits, MessageFlags, ActivityType } from 'discord.js';
+import { Client, Events, GatewayIntentBits, MessageFlags, ActivityType, REST, Routes, ApplicationFlagsBitField } from 'discord.js';
 import { commands } from './commands.js';
 import { readConfig } from './config.js';
 import { handleInteraction } from './handler.js';
@@ -16,7 +16,14 @@ try { config = readConfig(); }
 catch (error) { console.error(error.message); process.exit(1); }
 
 const store = createStore(process.env.DATA_DIR || './data');
-const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages], allowedMentions: { parse: [] } });
+const intents=[GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages];
+try {
+  const application=await new REST({version:'10'}).setToken(config.token).get(Routes.currentApplication());
+  const flags=new ApplicationFlagsBitField(application.flags ?? 0);
+  if(flags.any([ApplicationFlagsBitField.Flags.GatewayMessageContent,ApplicationFlagsBitField.Flags.GatewayMessageContentLimited])) intents.push(GatewayIntentBits.MessageContent);
+  else console.warn('$delete staat uit: schakel Message Content Intent in de Developer Portal in en herstart de bot.');
+} catch { console.warn('Message Content Intent kon niet worden gecontroleerd; $delete is voorlopig uitgeschakeld.'); }
+const client = new Client({ intents, allowedMentions: { parse: [] } });
 let ready = false;
 let refreshTimer;
 let liveRefresh;
@@ -70,8 +77,12 @@ client.on(Events.GuildMemberUpdate, (before, after) => {
 });
 client.on(Events.GuildMemberAdd, member => { if (member.guild.id===config.guildId) liveRefresh?.schedule(); });
 client.on(Events.GuildMemberRemove, member => { if (member.guild.id===config.guildId) liveRefresh?.schedule(); });
-client.on(Events.MessageCreate, message => {
+client.on(Events.MessageCreate, async message => {
   if (message.guildId !== config.guildId || message.author.bot || message.webhookId) return;
+  if (ready && intents.includes(GatewayIntentBits.MessageContent)) {
+    try { await handleTicketMessage(message,config.guildId,store); }
+    catch(error) { logError('Ticket verwijderen mislukt',error); }
+  }
   try { store.activity(message.guildId, message.author.id, message.createdTimestamp); }
   catch (error) { logError('Activiteit opslaan mislukt', error); }
 });
