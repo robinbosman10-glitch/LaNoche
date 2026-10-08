@@ -1,3 +1,4 @@
+import { syncApplicationLinks } from './applications.js';
 import { handleTicketInteraction, handleTicketMessage, syncTicketAccess } from './tickets.js';
 import { invalidateMembers } from './member-cache.js';
 import { existsSync } from 'node:fs';
@@ -38,6 +39,9 @@ client.once(Events.ClientReady, async current => {
     // Own dedicated application: synchronizes exactly the 10 commands in this guild.
     await guild.commands.set(commands);
     ready = true;
+    syncApplicationLinks(guild,store).then(result=>{
+      console.log(`Sollicitatieknoppen bijgewerkt: ${result.updated}; mislukt: ${result.failed}.`);
+    }).catch(error=>logError('Sollicitatieknoppen bijwerken mislukt',error));
     syncTicketAccess(guild,store).then(result=>{
       console.log(`Tickettoegang bijgewerkt: ${result.updated}; mislukt: ${result.failed}.`);
     }).catch(error=>logError('Tickettoegang bijwerken mislukt',error));
