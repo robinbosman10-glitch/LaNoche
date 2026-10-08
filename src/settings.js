@@ -9,6 +9,8 @@ export const settings = {
     witwas: { parent: '1557639163807932516', support: '1384749084694286356' },
   },
   channels: {
+    ticketLogs: '1420469739725000744',
+    absenceLogs: '1557653747654729748',
     sollistatus: '1553516146773463162',
     ledenlijst: '1553516111176138852',
     aangenomen: '1557288102286987274',

@@ -1,3 +1,4 @@
+import { queueTicketAudit } from './audit.js';
 import { settings } from './settings.js';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ChannelType, PermissionFlagsBits as P, MessageFlags } from 'discord.js';
 import { branded, field } from './embeds.js';
@@ -122,7 +123,9 @@ export async function handleTicketInteraction(i,guildId,store) {
       if(!mayManage(ticket,member)) throw new UserError('Alleen beheerders, de ticketbeheerrol en de bijbehorende behandelrol kunnen tickets beheren.');
       if(action==='delete-request') {
         if(!ticket.closed) throw new UserError('Sluit het ticket eerst voordat je deze knop gebruikt.');
+        const channelName=i.channel.name;
         await i.channel.delete(`Ticket verwijderd door ${i.user.id}`);
+        queueTicketAudit(store,ticket,'deleted',i.user.id,channelName);
         store.updateTicket(ticket.channel,{closed:1});
         return i.editReply({content:'Het ticketkanaal is definitief verwijderd.'}).catch(()=>{});
       }
@@ -141,6 +144,7 @@ export async function handleTicketInteraction(i,guildId,store) {
         ticket.closed=1;
       } else throw new UserError('Onbekende ticketactie.');
       store.updateTicket(ticket.channel,ticket);
+      if(ticket.closed)queueTicketAudit(store,ticket,'closed',i.user.id,i.channel.name);
       const message=await i.channel.messages.fetch(ticket.message);
       await message.edit({...ticketPayload(ticket),attachments:[]});
       if(ticket.closed) {
@@ -160,7 +164,9 @@ export async function handleTicketMessage(message,guildId,store) {
   await message.delete().catch(()=>{});
   if(!mayManage(ticket,member)) return;
   return locked(`${guildId}:ticket:${message.channelId}`,async()=>{
+    const channelName=message.channel.name;
     await message.channel.delete(`Ticket verwijderd door ${message.author.id}`);
+    queueTicketAudit(store,ticket,'deleted',message.author.id,channelName);
     store.updateTicket(ticket.channel,{closed:1});
   });
 }

@@ -96,3 +96,12 @@ Na goedkeuring ontvangt het lid direct afwezigheidsrol `1557648943565774878` en 
 De bot moet Rollen beheren hebben, boven de afwezigheidsrol en het lid staan en de coördinatorrol kunnen taggen. Oude afwezigheidsmeldingen van vóór deze update blijven behouden; alleen nieuwe aanvragen krijgen de beoordelingsknoppen en automatische roltoekenning.
 
 Eenmalige reset `2026-10-08-reset-1`: bij de eerste start met deze versie worden oude afwezigheidsregistraties gewist, openstaande/goedgekeurde aanvragen ingetrokken en rol `1557648943565774878` bij alle leden verwijderd. De voltooide reset wordt in SQLite vastgelegd en herhaalt zich niet bij volgende deployments. Tijdens een onvoltooide reset worden nieuwe aanvragen tijdelijk geblokkeerd; ontbrekende rolrechten worden opnieuw geprobeerd. Bestaande aanvraagembeds krijgen status ingetrokken en uitgeschakelde knoppen. Historische berichten worden niet verwijderd.
+
+
+## Centrale logkanalen
+
+- Alle ticketcategorieën: `1420469739725000744`. Bij sluiten en definitief verwijderen via de bot verschijnt een animated logembed met categorie, aanvrager, behandelaar, uitvoerder, kanaalnaam/ID en tijdstip.
+- Afwezigheid: `1557653747654729748`. Aanvragen, goedkeuringen, afkeuringen en automatisch verlopen afwezigheden krijgen een animated logembed met lid, reden, periode en beoordelaar. Automatische beëindiging vermeldt ook de oorspronkelijke goedkeurder.
+- Beide gebruiken de animated La Noche-banner en het animated logo, met oranje/groene/rode/grijze statuskleuren en zonder pings.
+- Logs worden opgeslagen in SQLite en direct na gebruikersacties verstuurd. Een wachtrij probeert onverstuurde logs elke 15 seconden en na herstart opnieuw. Botrechten in beide logkanalen: Bekijk kanaal, Berichten versturen, Links insluiten en Bestanden bijvoegen.
+- Logging geldt voor acties vanaf deze versie. Ticketlogs bevatten actiegegevens, geen volledige gesprekstranscripten. Handmatig via Discord verwijderde kanalen vallen niet onder de botacties.

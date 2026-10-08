@@ -12,6 +12,7 @@ export function createStore(directory) {
     CREATE TRIGGER IF NOT EXISTS max_two_open_tickets BEFORE INSERT ON tickets
     WHEN NEW.closed=0 AND (SELECT COUNT(*) FROM tickets WHERE guild=NEW.guild AND user=NEW.user AND closed=0)>=2
     BEGIN SELECT RAISE(ABORT, 'max_two_open_tickets'); END;
+    CREATE TABLE IF NOT EXISTS audit_outbox (id TEXT PRIMARY KEY, guild TEXT, payload TEXT, sent INTEGER DEFAULT 0);
     CREATE TABLE IF NOT EXISTS activity (guild TEXT, user TEXT, last INTEGER, PRIMARY KEY(guild,user));
     CREATE TABLE IF NOT EXISTS absences (guild TEXT, user TEXT, start INTEGER, end INTEGER, PRIMARY KEY(guild,user));
     CREATE TABLE IF NOT EXISTS absence_requests (id TEXT PRIMARY KEY, guild TEXT, user TEXT, start INTEGER, end INTEGER, reason TEXT, status TEXT, reviewer TEXT, channel TEXT, message TEXT, dirty INTEGER DEFAULT 1);
@@ -21,6 +22,9 @@ export function createStore(directory) {
     CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);`);
   db.prepare('INSERT OR IGNORE INTO meta VALUES (?,?)').run('trackingStart', String(Date.now()));
   return {
+    queueAudit(event) { db.prepare('INSERT OR IGNORE INTO audit_outbox(id,guild,payload) VALUES (?,?,?)').run(event.id,event.guild,JSON.stringify(event)); },
+    pendingAudit(guild) { return db.prepare('SELECT id,payload FROM audit_outbox WHERE guild=? AND sent=0 ORDER BY rowid LIMIT 50').all(guild).map(r=>JSON.parse(r.payload)); },
+    markAuditSent(id) {db.prepare('UPDATE audit_outbox SET sent=1 WHERE id=?').run(id);},
     since: Number(db.prepare('SELECT value FROM meta WHERE key=?').get('trackingStart').value),
     activity(guild, user, time) { db.prepare('INSERT INTO activity VALUES (?,?,?) ON CONFLICT(guild,user) DO UPDATE SET last=MAX(last,excluded.last)').run(guild,user,time); },
     last(guild, user) { return db.prepare('SELECT last FROM activity WHERE guild=? AND user=?').get(guild,user)?.last; },

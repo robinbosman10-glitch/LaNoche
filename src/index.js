@@ -1,3 +1,4 @@
+import { flushAudit } from './audit.js';
 import { handleAbsenceInteraction, refreshAbsences, resetAbsencesOnce, absenceResetVersion } from './absences.js';
 import { syncApplicationLinks } from './applications.js';
 import { handleTicketInteraction, handleTicketMessage, syncTicketAccess } from './tickets.js';
@@ -29,9 +30,10 @@ const client = new Client({ intents, allowedMentions: { parse: [] } });
 let ready = false;
 let refreshTimer;
 let absenceTimer;
+let auditTimer;
 let absenceRefreshing=false;
 let liveRefresh;
-function stop(code) { clearInterval(refreshTimer); clearInterval(absenceTimer); liveRefresh?.stop(); client.destroy(); store.close(); process.exit(code); }
+function stop(code) { clearInterval(refreshTimer); clearInterval(absenceTimer); clearInterval(auditTimer); liveRefresh?.stop(); client.destroy(); store.close(); process.exit(code); }
 function logError(label, error) {
   // Do not log request bodies, headers, tokens or interaction payloads.
   console.error(`${label} (${error?.code ?? error?.name ?? 'onbekend'})`);
@@ -43,6 +45,9 @@ client.once(Events.ClientReady, async current => {
     await guild.commands.set(commands);
     store.beginAbsenceReset(guild.id,absenceResetVersion);
     ready = true;
+    const sendLogs=()=>flushAudit(guild,store).catch(error=>logError('Logboek bijwerken mislukt',error));
+    void sendLogs();
+    auditTimer=setInterval(sendLogs,15000);auditTimer.unref();
     const refreshAbsenceRoles=async()=>{
       if(absenceRefreshing)return;
       absenceRefreshing=true;
@@ -79,6 +84,7 @@ client.on(Events.InteractionCreate, async interaction => {
     if (absence) await handleAbsenceInteraction(interaction,config.guildId,store);
     else if (ticket) await handleTicketInteraction(interaction, config.guildId, store);
     else await handleInteraction(interaction, config.guildId, store);
+    if(interaction.guildId===config.guildId)void flushAudit(interaction.guild,store).catch(error=>logError('Logboek bijwerken mislukt',error));
   } catch (error) {
     logError('Command uitvoeren mislukt', error);
     try {
@@ -103,7 +109,7 @@ client.on(Events.GuildMemberRemove, member => { if (member.guild.id===config.gui
 client.on(Events.MessageCreate, async message => {
   if (message.guildId !== config.guildId || message.author.bot || message.webhookId) return;
   if (ready && intents.includes(GatewayIntentBits.MessageContent)) {
-    try { await handleTicketMessage(message,config.guildId,store); }
+    try { await handleTicketMessage(message,config.guildId,store); if(message.content?.trim()==='$delete')void flushAudit(message.guild,store).catch(error=>logError('Logboek bijwerken mislukt',error)); }
     catch(error) { logError('Ticket verwijderen mislukt',error); }
   }
   try { store.activity(message.guildId, message.author.id, message.createdTimestamp); }

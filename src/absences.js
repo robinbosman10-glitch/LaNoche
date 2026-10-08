@@ -1,3 +1,4 @@
+import { queueAbsenceAudit } from './audit.js';
 import { getMembers } from './member-cache.js';
 import {randomUUID} from 'node:crypto';
 import {ActionRowBuilder,ButtonBuilder,ButtonStyle,MessageFlags,PermissionFlagsBits as P,escapeMarkdown} from 'discord.js';
@@ -45,6 +46,7 @@ export async function submitAbsenceRequest(i,store) {
     let message;
     try {message=await channel.send(payload);}catch(error){store.deleteAbsenceRequest(request.id);throw error;}
     store.updateAbsenceRequest(request.id,{message:message.id,dirty:0});
+    queueAbsenceAudit(store,store.absenceRequest(request.id));
     return i.editReply({content:`Je afwezigheidsaanvraag is ingediend en wacht op goedkeuring.\n${message.url}`});
   });
 }
@@ -63,6 +65,7 @@ async function assignRole(guild,store,r) {
   await member.roles.add(settings.absenceRole,`Afwezigheid goedgekeurd door ${r.reviewer}`);
   store.setAbsent(r.guild,r.user,r.start,r.end);
   store.updateAbsenceRequest(r.id,{status:'approved',dirty:1});
+  queueAbsenceAudit(store,store.absenceRequest(r.id));
 }
 async function expire(guild,store,r) {
   if(['approved','approving'].includes(r.status)) {
@@ -73,6 +76,7 @@ async function expire(guild,store,r) {
     if(absence?.start===r.start && absence.end===r.end) store.clearAbsent(r.guild,r.user);
   }
   store.updateAbsenceRequest(r.id,{status:'expired',dirty:1});
+  queueAbsenceAudit(store,store.absenceRequest(r.id));
 }
 export async function handleAbsenceInteraction(i,guildId,store) {
   if(!i.inGuild() || i.guildId!==guildId) return i.reply({content:'Deze aanvraag hoort bij de La Noche-server.',flags:MessageFlags.Ephemeral});
@@ -88,7 +92,7 @@ export async function handleAbsenceInteraction(i,guildId,store) {
       const r=store.absenceRequest(id);
       if(r.status!=='pending') throw new UserError('Deze aanvraag is al behandeld.');
       if(r.end<Date.now()) {await expire(i.guild,store,r);throw new UserError('Deze afwezigheidsperiode is al verstreken.');}
-      if(action==='deny') store.updateAbsenceRequest(id,{status:'denied',reviewer:i.user.id,dirty:1});
+      if(action==='deny') {store.updateAbsenceRequest(id,{status:'denied',reviewer:i.user.id,dirty:1});queueAbsenceAudit(store,store.absenceRequest(id));}
       else {
         // Persist intent before Discord call; startup recovery completes interrupted approvals.
         store.updateAbsenceRequest(id,{status:'approving',reviewer:i.user.id,dirty:1});

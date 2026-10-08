@@ -34,7 +34,7 @@ test('absence embed has animated assets and correct green/red review buttons',()
 });
 test('reviewer approval grants role once, activates absence and prevents second decision',async t=>{
  const s=setup(t);s.addRequest();await handleAbsenceInteraction(s.interaction(),'g',s.store);
- assert.equal(s.adds(),1);assert.equal(s.store.absenceRequest('request').status,'approved');assert.equal(s.store.absent('g','u').end,s.r.end);
+ assert.equal(s.adds(),1);assert.equal(s.store.pendingAudit('g').at(-1).actor,'reviewer');assert.equal(s.store.pendingAudit('g').at(-1).action,'approved');assert.equal(s.store.absenceRequest('request').status,'approved');assert.equal(s.store.absent('g','u').end,s.r.end);
  const again=s.interaction('deny');await handleAbsenceInteraction(again,'g',s.store);assert.match(again.replies[0].content,/al behandeld/);assert.equal(s.adds(),1);
  assert.ok(s.changes[0].components[0].toJSON().components.every(b=>b.disabled));
 });

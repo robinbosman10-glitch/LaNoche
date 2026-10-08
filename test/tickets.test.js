@@ -50,6 +50,7 @@ test('ordinary users cannot manage tickets and closing requires confirmation',as
  s.guild.members.fetch=async()=>admin;
  await handleTicketInteraction(s.interaction('close'),'g',s.store);assert.equal(s.store.ticket('ticket').closed,0);
  await handleTicketInteraction(s.interaction('confirm-close'),'g',s.store);assert.equal(s.store.ticket('ticket').closed,1);
+ assert.equal(s.store.pendingAudit('g').at(-1).action,'closed');
  assert.equal(s.store.openTicket('g','user'),undefined);assert.ok(s.changes.some(c=>Array.isArray(c)&&c[1].SendMessages===false));
 });
 test('ticket and panel survive database reopen',()=>{
@@ -105,7 +106,7 @@ test('hidden delete removes an authorized ticket immediately',async t=>{
  const message={guildId:'g',channelId:'ticket',guild:s.guild,channel:s.interaction('close').channel,author:{id:'staff',bot:false},content:'$delete',delete:async()=>{commandRemoved=true;}};
  const count=s.sends.length;
  await handleTicketMessage(message,'g',s.store);
- assert.equal(commandRemoved,true);assert.equal(s.deleted(),1);assert.equal(s.sends.length,count);assert.equal(s.store.ticket('ticket').closed,1);
+ assert.equal(commandRemoved,true);assert.equal(s.deleted(),1);assert.equal(s.store.pendingAudit('g').at(-1).action,'deleted');assert.equal(s.store.pendingAudit('g').at(-1).actor,'staff');assert.equal(s.sends.length,count);assert.equal(s.store.ticket('ticket').closed,1);
 });
 test('hidden delete ignores ordinary users and non-ticket channels',async t=>{
  const s=setup(t);await handleTicketInteraction(s.interaction('open'),'g',s.store);
