@@ -105,3 +105,14 @@ Eenmalige reset `2026-10-08-reset-1`: bij de eerste start met deze versie worden
 - Beide gebruiken de animated La Noche-banner en het animated logo, met oranje/groene/rode/grijze statuskleuren en zonder pings.
 - Logs worden opgeslagen in SQLite en direct na gebruikersacties verstuurd. Een wachtrij probeert onverstuurde logs elke 15 seconden en na herstart opnieuw. Botrechten in beide logkanalen: Bekijk kanaal, Berichten versturen, Links insluiten en Bestanden bijvoegen.
 - Logging geldt voor acties vanaf deze versie. Ticketlogs bevatten actiegegevens, geen volledige gesprekstranscripten. Handmatig via Discord verwijderde kanalen vallen niet onder de botacties.
+
+Ticketlogs gebruiken één dossierbericht per ticket: sluiten plaatst het dossier, verwijderen werkt hetzelfde bericht bij. De sluiter en verwijderaar blijven beide zichtbaar in de afhandeling. Bericht-ID’s blijven opgeslagen over herstarts. Het dossier heeft een animated banner/logo, duidelijke status, aanvrager en behandelaar; lange ID’s staan compact in de footer. Dit samenvoegen geldt voor logs geplaatst vanaf deze versie.
+
+
+### Ticketdossier en transcript
+
+Sluiten en verwijderen gebruiken één dossierbericht. Onder het dossier staat **Transcript bekijken**; de knop levert een custom zwart-oranje HTML-bestand dat je kunt downloaden en in de browser openen. De bot leest alle berichtpagina’s vóór sluiten/verwijderen en slaat de tekst, auteurs, tijden, embedtekst en bijlagelinks op. Bijlagelinks kunnen later verlopen; de bestanden zelf zijn niet ingebed. Message Content Intent, Bekijk kanaal en Berichtgeschiedenis lezen zijn vereist. Als ophalen mislukt, verwijdert de bot het ticket niet.
+
+Bij opstart worden bestaande herkenbare ticketlogs samengevoegd en opnieuw vormgegeven. Als het oorspronkelijke kanaal nog bestaat, wordt alsnog een transcript gemaakt. Van al verwijderde kanalen zonder eerdere transcriptopslag kan het gesprek niet worden teruggehaald. De oude dubbele logberichten worden vervangen door het ene dossier. De formulering over het bewaren van het gesprek en de kanaalmention zijn verwijderd uit nieuwe sluitingsberichten en dossiers.
+
+Nieuwe ticketkanalen krijgen naam `》【🟠】Categorie Naam` (bijvoorbeeld `》【🟠】Sollicitaties robin`). Discord kan hoofdletters/spaties normaliseren volgens de kanaalnaamregels.

@@ -1,4 +1,4 @@
-import { flushAudit } from './audit.js';
+import { flushAudit, handleTranscript, upgradeTicketLogs } from './audit.js';
 import { handleAbsenceInteraction, refreshAbsences, resetAbsencesOnce, absenceResetVersion } from './absences.js';
 import { syncApplicationLinks } from './applications.js';
 import { handleTicketInteraction, handleTicketMessage, syncTicketAccess } from './tickets.js';
@@ -45,7 +45,7 @@ client.once(Events.ClientReady, async current => {
     await guild.commands.set(commands);
     store.beginAbsenceReset(guild.id,absenceResetVersion);
     ready = true;
-    const sendLogs=()=>flushAudit(guild,store).catch(error=>logError('Logboek bijwerken mislukt',error));
+    const sendLogs=()=>upgradeTicketLogs(guild,store).catch(error=>logError('Bestaande ticketlogs bijwerken mislukt',error)).then(()=>flushAudit(guild,store)).catch(error=>logError('Logboek bijwerken mislukt',error));
     void sendLogs();
     auditTimer=setInterval(sendLogs,15000);auditTimer.unref();
     const refreshAbsenceRoles=async()=>{
@@ -73,15 +73,17 @@ client.once(Events.ClientReady, async current => {
   } catch (error) { logError('Commands registreren mislukt; controleer GUILD_ID en de botuitnodiging', error); stop(1); }
 });
 client.on(Events.InteractionCreate, async interaction => {
+  const transcript=interaction.isButton() && interaction.customId.startsWith('ln-transcript:');
   const absence=interaction.isButton() && interaction.customId.startsWith('ln-absence:');
   const ticket = (interaction.isButton() || interaction.isStringSelectMenu()) && interaction.customId.startsWith('ln-ticket:');
-  if (!absence && !ticket && !interaction.isChatInputCommand() && !(interaction.isModalSubmit() && interaction.customId === 'lanoche:afwezig')) return;
+  if (!transcript && !absence && !ticket && !interaction.isChatInputCommand() && !(interaction.isModalSubmit() && interaction.customId === 'lanoche:afwezig')) return;
   try {
     if (!ready) {
       await interaction.reply({ content: 'De bot start nog op. Probeer het zo opnieuw.', flags: MessageFlags.Ephemeral });
       return;
     }
-    if (absence) await handleAbsenceInteraction(interaction,config.guildId,store);
+    if(transcript)await handleTranscript(interaction,store);
+    else if (absence) await handleAbsenceInteraction(interaction,config.guildId,store);
     else if (ticket) await handleTicketInteraction(interaction, config.guildId, store);
     else await handleInteraction(interaction, config.guildId, store);
     if(interaction.guildId===config.guildId)void flushAudit(interaction.guild,store).catch(error=>logError('Logboek bijwerken mislukt',error));

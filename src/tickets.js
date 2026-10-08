@@ -1,3 +1,4 @@
+import { captureTranscript } from './transcripts.js';
 import { queueTicketAudit } from './audit.js';
 import { settings } from './settings.js';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ChannelType, PermissionFlagsBits as P, MessageFlags } from 'discord.js';
@@ -82,7 +83,7 @@ async function openTicket(i,store) {
     const overwrites=[{id:i.guildId,deny:[P.ViewChannel]}, {id:me.id,allow:[...allow,P.ManageChannels,P.ManageMessages,P.MentionEveryone]}, {id:i.user.id,allow}];
     for(const id of supportRoles) overwrites.push({id,allow});
     const name=i.user.username.toLowerCase().replace(/[^a-z0-9-]/g,'').slice(0,30)||'lid';
-    const channel=await i.guild.channels.create({name:`${kind}-${name}`,type:ChannelType.GuildText,parent:route.parent||undefined,permissionOverwrites:overwrites,topic:`La Noche | ${kind} | ${i.user.id}`,reason:`Ticket geopend door ${i.user.id}`});
+    const channel=await i.guild.channels.create({name:`》【🟠】${ticketTypes.find(t=>t[0]===kind)[1]} ${name}`.slice(0,100),type:ChannelType.GuildText,parent:route.parent||undefined,permissionOverwrites:overwrites,topic:`La Noche | ${kind} | ${i.user.id}`,reason:`Ticket geopend door ${i.user.id}`});
     const ticket={guild:i.guildId,channel:channel.id,user:i.user.id,kind,support:route.support,claimed:null,closed:0,message:null};
     let message;
     try {
@@ -123,15 +124,16 @@ export async function handleTicketInteraction(i,guildId,store) {
       if(!mayManage(ticket,member)) throw new UserError('Alleen beheerders, de ticketbeheerrol en de bijbehorende behandelrol kunnen tickets beheren.');
       if(action==='delete-request') {
         if(!ticket.closed) throw new UserError('Sluit het ticket eerst voordat je deze knop gebruikt.');
+        const transcript=await captureTranscript(i.channel,ticket);
         const channelName=i.channel.name;
         await i.channel.delete(`Ticket verwijderd door ${i.user.id}`);
-        queueTicketAudit(store,ticket,'deleted',i.user.id,channelName);
+        queueTicketAudit(store,ticket,'deleted',i.user.id,channelName,transcript);
         store.updateTicket(ticket.channel,{closed:1});
         return i.editReply({content:'Het ticketkanaal is definitief verwijderd.'}).catch(()=>{});
       }
       if(ticket.closed) throw new UserError('Dit ticket is al gesloten.');
       if(action!=='confirm-close' && i.message.id!==ticket.message) throw new UserError('Gebruik de knoppen op het oorspronkelijke ticketbericht.');
-      if(action==='close') return i.editReply({content:'Dit ticket sluiten? Het gesprek blijft bewaard; de aanvrager kan daarna niet meer reageren.',components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('ln-ticket:confirm-close').setLabel('Ja, ticket sluiten').setStyle(ButtonStyle.Danger))]});
+      if(action==='close') return i.editReply({content:'Dit ticket sluiten? De aanvrager kan daarna niet meer reageren.',components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('ln-ticket:confirm-close').setLabel('Ja, ticket sluiten').setStyle(ButtonStyle.Danger))]});
       if(action==='claim') {
         if(ticket.claimed) throw new UserError(`Dit ticket is al geclaimd door <@${ticket.claimed}>.`);
         ticket.claimed=i.user.id;
@@ -140,18 +142,19 @@ export async function handleTicketInteraction(i,guildId,store) {
         if(ticket.claimed!==i.user.id && !member.permissions.has(P.Administrator) && !member.roles.cache.has(settings.allTicketRole)) throw new UserError('Alleen de behandelaar, de ticketbeheerrol of een beheerder kan deze claim vrijgeven.');
         ticket.claimed=null;
       } else if(action==='confirm-close') {
+        ticket.transcript=await captureTranscript(i.channel,ticket);
         await i.channel.permissionOverwrites.edit(ticket.user,{SendMessages:false,AddReactions:false,CreatePublicThreads:false,CreatePrivateThreads:false,SendMessagesInThreads:false});
         ticket.closed=1;
       } else throw new UserError('Onbekende ticketactie.');
       store.updateTicket(ticket.channel,ticket);
-      if(ticket.closed)queueTicketAudit(store,ticket,'closed',i.user.id,i.channel.name);
+      if(ticket.closed)queueTicketAudit(store,ticket,'closed',i.user.id,i.channel.name,ticket.transcript);
       const message=await i.channel.messages.fetch(ticket.message);
       await message.edit({...ticketPayload(ticket),attachments:[]});
       if(ticket.closed) {
         await i.channel.setName(`gesloten-${i.channel.name}`.slice(0,100)).catch(()=>{});
-        await i.channel.send({content:`🔒 Ticket gesloten door <@${i.user.id}>. Het gesprek blijft bewaard.`,allowedMentions:{parse:[]},components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('ln-ticket:delete-request').setLabel('Ticket verwijderen').setStyle(ButtonStyle.Danger).setEmoji('🗑️'))]});
+        await i.channel.send({content:`🔒 Ticket gesloten door <@${i.user.id}>.`,allowedMentions:{parse:[]},components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('ln-ticket:delete-request').setLabel('Ticket verwijderen').setStyle(ButtonStyle.Danger).setEmoji('🗑️'))]});
       }
-      await i.editReply({content:ticket.closed?'Ticket gesloten en bewaard.':ticket.claimed?'Je hebt het ticket geclaimd.':'De claim is vrijgegeven.',components:[]});
+      await i.editReply({content:ticket.closed?'Ticket gesloten.':ticket.claimed?'Je hebt het ticket geclaimd.':'De claim is vrijgegeven.',components:[]});
     });
   } catch(e) { if(e instanceof UserError) return i.editReply({content:e.message,allowedMentions:{parse:[]}}); throw e; }
 }
@@ -164,9 +167,10 @@ export async function handleTicketMessage(message,guildId,store) {
   await message.delete().catch(()=>{});
   if(!mayManage(ticket,member)) return;
   return locked(`${guildId}:ticket:${message.channelId}`,async()=>{
+    const transcript=await captureTranscript(message.channel,ticket);
     const channelName=message.channel.name;
     await message.channel.delete(`Ticket verwijderd door ${message.author.id}`);
-    queueTicketAudit(store,ticket,'deleted',message.author.id,channelName);
+    queueTicketAudit(store,ticket,'deleted',message.author.id,channelName,transcript);
     store.updateTicket(ticket.channel,{closed:1});
   });
 }

@@ -14,7 +14,7 @@ function setup(t) {
  t.after(()=>{store.close();rmSync(dir,{recursive:true,force:true});});
  store.setTicketPanel('g','panel','panel-message','support',null);
  const changes=[]; const sends=[]; const createdOptions=[]; const channels=new Map(); let creates=0; let deleted=0;
- const channel={id:'ticket',name:'sollicitaties-user',send:async p=>{sends.push(p);return {id:'first',pin:async()=>{},edit:async p=>changes.push(p)}},messages:{fetch:async()=>({edit:async p=>changes.push(p)})},permissionOverwrites:{edit:async(...args)=>changes.push(args)},setName:async()=>{},delete:async()=>{deleted++;}};
+ const channel={id:'ticket',name:'sollicitaties-user',send:async p=>{sends.push(p);return {id:'first',pin:async()=>{},edit:async p=>changes.push(p)}},messages:{fetch:async options=>typeof options==='object'?new Map():({edit:async p=>changes.push(p)})},permissionOverwrites:{edit:async(...args)=>changes.push(args)},setName:async()=>{},delete:async()=>{deleted++;}};
  const guild={id:'g',members:{fetch:async()=>admin,fetchMe:async()=>({id:'bot',permissions:new PermissionsBitField(P.ManageChannels)})},roles:{fetch:async id=>({id})},channels:{create:async options=>{creates++;createdOptions.push(options);assert.equal(options.permissionOverwrites[0].deny[0],P.ViewChannel);const created={...channel,id:creates===1?'ticket':`ticket${creates}`};channels.set(created.id,created);return created;},fetch:async id=>channels.get(id)||({id,type:ChannelType.GuildCategory})}};
  function interaction(action,user='user') { const replies=[];return {replies,guild,guildId:'g',channelId:action==='open'?'panel':'ticket',channel,customId:`ln-ticket:${action}`,user:{id:user,username:user},values:['sollicitaties'],message:{id:action==='open'?'panel-message':'first'},inGuild:()=>true,deferReply:async()=>{},editReply:async p=>{replies.push(p);return {id:'confirmation',...p};},reply:async p=>p}; }
  return {store,interaction,changes,sends,guild,createdOptions,deleted:()=>deleted,creates:()=>creates};
@@ -67,6 +67,7 @@ for (const [kind,parent,support] of [
  const s=setup(t);const i=s.interaction('open');i.values=[kind];
  await handleTicketInteraction(i,'g',s.store);
  assert.equal(s.createdOptions[0].parent,parent);
+ assert.ok(s.createdOptions[0].name.startsWith('》【🟠】'));assert.ok(s.createdOptions[0].name.endsWith(' user'));
  assert.deepEqual(s.createdOptions[0].permissionOverwrites.map(o=>o.id),['g','bot','user',support,settings.allTicketRole]);
  assert.equal(s.store.ticket('ticket').support,support);
  assert.equal(s.sends[0].content,`<@&${support}> <@&${settings.allTicketRole}>`);assert.deepEqual(s.sends[0].allowedMentions,{parse:[],roles:[support,settings.allTicketRole]});

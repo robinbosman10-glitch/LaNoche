@@ -12,6 +12,7 @@ export function createStore(directory) {
     CREATE TRIGGER IF NOT EXISTS max_two_open_tickets BEFORE INSERT ON tickets
     WHEN NEW.closed=0 AND (SELECT COUNT(*) FROM tickets WHERE guild=NEW.guild AND user=NEW.user AND closed=0)>=2
     BEGIN SELECT RAISE(ABORT, 'max_two_open_tickets'); END;
+    CREATE TABLE IF NOT EXISTS ticket_log_messages (guild TEXT, ticket TEXT, channel TEXT, message TEXT, PRIMARY KEY(guild,ticket));
     CREATE TABLE IF NOT EXISTS audit_outbox (id TEXT PRIMARY KEY, guild TEXT, payload TEXT, sent INTEGER DEFAULT 0);
     CREATE TABLE IF NOT EXISTS activity (guild TEXT, user TEXT, last INTEGER, PRIMARY KEY(guild,user));
     CREATE TABLE IF NOT EXISTS absences (guild TEXT, user TEXT, start INTEGER, end INTEGER, PRIMARY KEY(guild,user));
@@ -22,6 +23,12 @@ export function createStore(directory) {
     CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);`);
   db.prepare('INSERT OR IGNORE INTO meta VALUES (?,?)').run('trackingStart', String(Date.now()));
   return {
+    auditMigrationDone(key) {return Boolean(db.prepare('SELECT value FROM meta WHERE key=?').get(key));},
+    finishAuditMigration(key) {db.prepare('INSERT OR REPLACE INTO meta VALUES (?,?)').run(key,'done');},
+    replaceAudit(event) {db.prepare('UPDATE audit_outbox SET payload=?,sent=0 WHERE id=?').run(JSON.stringify(event),event.id);},
+    auditEvent(id) {const row=db.prepare('SELECT payload FROM audit_outbox WHERE id=?').get(id);return row?JSON.parse(row.payload):null;},
+    ticketLog(guild,ticket) {return db.prepare('SELECT channel,message FROM ticket_log_messages WHERE guild=? AND ticket=?').get(guild,ticket);},
+    setTicketLog(guild,ticket,channel,message) {db.prepare('INSERT INTO ticket_log_messages VALUES (?,?,?,?) ON CONFLICT(guild,ticket) DO UPDATE SET channel=excluded.channel,message=excluded.message').run(guild,ticket,channel,message);},
     queueAudit(event) { db.prepare('INSERT OR IGNORE INTO audit_outbox(id,guild,payload) VALUES (?,?,?)').run(event.id,event.guild,JSON.stringify(event)); },
     pendingAudit(guild) { return db.prepare('SELECT id,payload FROM audit_outbox WHERE guild=? AND sent=0 ORDER BY rowid LIMIT 50').all(guild).map(r=>JSON.parse(r.payload)); },
     markAuditSent(id) {db.prepare('UPDATE audit_outbox SET sent=1 WHERE id=?').run(id);},
