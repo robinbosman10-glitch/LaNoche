@@ -39,3 +39,21 @@ Node.js 24+, `npm ci`, kopieer `.env.example` naar `.env`, vul token/server-ID i
 `assets/logo.png`: het originele aangeleverde logo. `assets/banner.png`: de bijpassende statische banner, gemaakt met de ingebouwde imagegen-tool. Prompt: premium brede La Noche Discord-banner, aangeleverd oranje logo, zwart getextureerde achtergrond, oranje neonranden, rook en vonken; alleen tekst LA NOCHE. De banner is statisch, geen GIF.
 
 Tests controleren ranggrenzen, behoud van rollen, datums, opslag over herstarts, lijstpaginering en toegangscontrole. Live Discord-acties vereisen de hostingconfiguratie en zijn niet vanuit deze ontwikkelomgeving uitgevoerd.
+
+
+## Ticketpaneel
+
+Voer na deployment `/ticket-panel` uit in het gewenste tekstkanaal. Het paneel gebruikt het bestaande La Noche-logo en de statische zwart-oranje banner.
+
+- Vier onderwerpen: Sollicitaties, WitWas, Drugs inkoop en Drugs verkoop (roleplay).
+- Optioneel `behandelrol`: geeft deze rol toegang tot nieuw aangemaakte tickets. Zonder rol behandelen alleen beheerders tickets.
+- Optioneel `categorie`: Discord-categorie waaronder nieuwe tickets verschijnen. Zonder categorie staan ze op serverniveau.
+- Opnieuw uitvoeren in hetzelfde kanaal werkt het bestaande paneel bij. Eerder gekozen rol/categorie blijven behouden als je opties weglaat. Wijzigingen gelden voor nieuwe tickets.
+- Eén open ticket per gebruiker. Privétoegang voor de aanvrager, behandelrol, bot en serverbeheerders.
+- Het eerste ticketbericht heeft Claimen, Unclaimen en Sluiten. Het wordt indien mogelijk vastgepind. Alleen de behandelaar of een beheerder kan een claim vrijgeven.
+- Sluiten vraagt bevestiging, maakt het ticket alleen-lezen voor de aanvrager en bewaart het gesprek. Een serverbeheerder behoudt zijn Discord-bevoegdheden.
+- Ticketgegevens en claims blijven behouden in de SQLite-database; gebruik het bestaande Railway-volume op `/data`.
+
+Botrechten: Kanalen bekijken/beheren, Rollen beheren (kanaalrechten aanpassen), Berichten versturen/beheren, Berichtgeschiedenis lezen, Links insluiten en Bestanden bijvoegen. Bestaande ticketkanalen krijgen expliciete toegangsregels en nemen geen openbare categoriepermissies over.
+
+Validatie: `npm test`; Discord-livecontrole gebeurt na deployment met een gewoon lid en een behandelaar.

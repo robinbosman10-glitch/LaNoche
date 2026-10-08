@@ -1,3 +1,4 @@
+import { handleTicketInteraction } from './tickets.js';
 import { invalidateMembers } from './member-cache.js';
 import { existsSync } from 'node:fs';
 import { Client, Events, GatewayIntentBits, MessageFlags, ActivityType } from 'discord.js';
@@ -39,13 +40,15 @@ client.once(Events.ClientReady, async current => {
   } catch (error) { logError('Commands registreren mislukt; controleer GUILD_ID en de botuitnodiging', error); stop(1); }
 });
 client.on(Events.InteractionCreate, async interaction => {
-  if (!interaction.isChatInputCommand() && !(interaction.isModalSubmit() && interaction.customId === 'lanoche:afwezig')) return;
+  const ticket = (interaction.isButton() || interaction.isStringSelectMenu()) && interaction.customId.startsWith('ln-ticket:');
+  if (!ticket && !interaction.isChatInputCommand() && !(interaction.isModalSubmit() && interaction.customId === 'lanoche:afwezig')) return;
   try {
     if (!ready) {
       await interaction.reply({ content: 'De bot start nog op. Probeer het zo opnieuw.', flags: MessageFlags.Ephemeral });
       return;
     }
-    await handleInteraction(interaction, config.guildId, store);
+    if (ticket) await handleTicketInteraction(interaction, config.guildId, store);
+    else await handleInteraction(interaction, config.guildId, store);
   } catch (error) {
     logError('Command uitvoeren mislukt', error);
     try {

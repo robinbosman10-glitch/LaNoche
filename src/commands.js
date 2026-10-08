@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
+import { SlashCommandBuilder, PermissionFlagsBits, ChannelType } from 'discord.js';
 
 // Names and descriptions follow the supplied screenshots. Wiring comes later.
 export const definitions = [
@@ -22,6 +22,10 @@ export const commands = definitions.map(command => {
   if (['aangenomen', 'ontslaan', 'promotie', 'demote'].includes(command.name)) {
     builder.addUserOption(option => option.setName('persoon').setDescription('Het ganglid').setRequired(true));
     builder.addStringOption(option => option.setName('reden').setDescription('Toelichting bij deze wijziging').setMaxLength(700));
+  }
+  if (command.name === 'ticket-panel') {
+    builder.addRoleOption(o=>o.setName('behandelrol').setDescription('Optioneel: rol die tickets naast beheerders behandelt'));
+    builder.addChannelOption(o=>o.setName('categorie').setDescription('Optioneel: categorie voor nieuwe privétickets').addChannelTypes(ChannelType.GuildCategory));
   }
   return builder.toJSON();
 });

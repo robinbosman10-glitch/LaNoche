@@ -1,3 +1,4 @@
+import { publishTicketPanel } from './tickets.js';
 import { getMembers } from './member-cache.js';
 import { ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags, PermissionFlagsBits, escapeMarkdown } from 'discord.js';
 import { definitions } from './commands.js';
@@ -157,6 +158,7 @@ export async function handleInteraction(i, guildId, store) {
     if (['aangenomen','ontslaan','promotie','demote'].includes(i.commandName)) return await roleAction(i,store);
     if (i.commandName==='discordinactief') return await inactivity(i,store);
     if (i.commandName==='ledenlijst') { const url = await updateMemberlist(i.guild,store,i.channelId); return await i.editReply({content:`De ledenlijst is bijgewerkt.\n${url}`}); }
+    if (i.commandName==='ticket-panel') return await publishTicketPanel(i,store);
     if (i.commandName==='sollistatus') return await applications(i,store);
     const pending = i.commandName==='ledenlijst' ? 'De standaard gangrangen worden nog aangeleverd.' : i.commandName==='ticket-panel' ? 'Het ticketpaneel wordt later ingericht.' : 'De rollen en het kanaal voor rolaanvragen worden nog ingesteld.';
     return await i.editReply({content:pending});
