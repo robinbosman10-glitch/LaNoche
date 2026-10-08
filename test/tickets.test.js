@@ -16,7 +16,7 @@ function setup(t) {
  const changes=[]; const sends=[]; const createdOptions=[]; const channels=new Map(); let creates=0; let deleted=0;
  const channel={id:'ticket',name:'sollicitaties-user',send:async p=>{sends.push(p);return {id:'first',pin:async()=>{},edit:async p=>changes.push(p)}},messages:{fetch:async()=>({edit:async p=>changes.push(p)})},permissionOverwrites:{edit:async(...args)=>changes.push(args)},setName:async()=>{},delete:async()=>{deleted++;}};
  const guild={id:'g',members:{fetch:async()=>admin,fetchMe:async()=>({id:'bot',permissions:new PermissionsBitField(P.ManageChannels)})},roles:{fetch:async id=>({id})},channels:{create:async options=>{creates++;createdOptions.push(options);assert.equal(options.permissionOverwrites[0].deny[0],P.ViewChannel);const created={...channel,id:creates===1?'ticket':`ticket${creates}`};channels.set(created.id,created);return created;},fetch:async id=>channels.get(id)||({id,type:ChannelType.GuildCategory})}};
- function interaction(action,user='user') { const replies=[];return {replies,guild,guildId:'g',channelId:action==='open'?'panel':'ticket',channel,customId:`ln-ticket:${action}`,user:{id:user,username:user},values:['sollicitaties'],message:{id:action==='open'?'panel-message':'first'},inGuild:()=>true,deferReply:async()=>{},editReply:async p=>{replies.push(p);return p;},reply:async p=>p}; }
+ function interaction(action,user='user') { const replies=[];return {replies,guild,guildId:'g',channelId:action==='open'?'panel':'ticket',channel,customId:`ln-ticket:${action}`,user:{id:user,username:user},values:['sollicitaties'],message:{id:action==='open'?'panel-message':'first'},inGuild:()=>true,deferReply:async()=>{},editReply:async p=>{replies.push(p);return {id:'confirmation',...p};},reply:async p=>p}; }
  return {store,interaction,changes,sends,guild,createdOptions,deleted:()=>deleted,creates:()=>creates};
 }
 test('panel contains four categories and serializes Discord embed limits',()=>{
@@ -115,4 +115,23 @@ test('hidden delete ignores ordinary users and non-ticket channels',async t=>{
  const message={guildId:'g',channelId:'ticket',guild:s.guild,channel:s.interaction('close').channel,author:{id:'user'},content:'$delete',delete:async()=>{}};
  await handleTicketMessage(message,'g',s.store);await handleTicketMessage({...message,channelId:'general'},'g',s.store);
  assert.equal(s.sends.length,count);assert.equal(s.deleted(),0);
+});
+
+test('closed notice offers delete button; authorized user confirms privately',async t=>{
+ const s=setup(t);await handleTicketInteraction(s.interaction('open'),'g',s.store);
+ await handleTicketInteraction(s.interaction('confirm-close','staff'),'g',s.store);
+ const notice=s.sends.at(-1);assert.equal(notice.components[0].toJSON().components[0].custom_id,'ln-ticket:delete-request');
+ const request=s.interaction('delete-request','staff');request.message.id='closed-notice';
+ await handleTicketInteraction(request,'g',s.store);assert.equal(s.deleted(),0);
+ const confirm=s.interaction('delete-confirm','staff');confirm.message.id='confirmation';
+ confirm.customId=request.replies.at(-1).components[0].toJSON().components[0].custom_id;
+ await handleTicketInteraction(confirm,'g',s.store);assert.equal(s.deleted(),1);
+});
+test('delete button rejects regular members and open tickets',async t=>{
+ const s=setup(t);await handleTicketInteraction(s.interaction('open'),'g',s.store);
+ const open=s.interaction('delete-request','staff');await handleTicketInteraction(open,'g',s.store);assert.match(open.replies.at(-1).content,/Sluit het ticket eerst/);
+ s.store.updateTicket('ticket',{closed:1});
+ s.guild.members.fetch=async()=>({permissions:new PermissionsBitField(),roles:{cache:new Map()}});
+ const denied=s.interaction('delete-request');await handleTicketInteraction(denied,'g',s.store);
+ assert.match(denied.replies.at(-1).content,/Alleen beheerders/);assert.equal(s.deleted(),0);
 });

@@ -118,6 +118,10 @@ export async function handleTicketInteraction(i,guildId,store) {
       if(!ticket || ticket.guild!==i.guildId) throw new UserError('Dit kanaal is geen geregistreerd ticket.');
       const member=await i.guild.members.fetch({user:i.user.id,force:true});
       if(!mayManage(ticket,member)) throw new UserError('Alleen beheerders en de ingestelde behandelrol kunnen tickets beheren.');
+      if(action==='delete-request') {
+        if(!ticket.closed) throw new UserError('Sluit het ticket eerst voordat je deze knop gebruikt.');
+        return sendDeleteConfirmation(i.channelId,i.user.id,payload=>i.editReply(payload));
+      }
       if(action==='delete-confirm') {
         const key=i.customId.split(':')[2];
         const request=deleteRequests.get(key);
@@ -146,7 +150,7 @@ export async function handleTicketInteraction(i,guildId,store) {
       await message.edit({...ticketPayload(ticket),attachments:[]});
       if(ticket.closed) {
         await i.channel.setName(`gesloten-${i.channel.name}`.slice(0,100)).catch(()=>{});
-        await i.channel.send({content:`🔒 Ticket gesloten door <@${i.user.id}>. Het gesprek blijft bewaard.`,allowedMentions:{parse:[]}});
+        await i.channel.send({content:`🔒 Ticket gesloten door <@${i.user.id}>. Het gesprek blijft bewaard.`,allowedMentions:{parse:[]},components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('ln-ticket:delete-request').setLabel('Ticket verwijderen').setStyle(ButtonStyle.Danger).setEmoji('🗑️'))]});
       }
       await i.editReply({content:ticket.closed?'Ticket gesloten en bewaard.':ticket.claimed?'Je hebt het ticket geclaimd.':'De claim is vrijgegeven.',components:[]});
     });
@@ -161,8 +165,11 @@ export async function handleTicketMessage(message,guildId,store) {
   const member=await message.guild.members.fetch({user:message.author.id,force:true});
   await message.delete().catch(()=>{});
   if(!mayManage(ticket,member)) return;
+  return sendDeleteConfirmation(message.channelId,message.author.id,payload=>message.channel.send(payload));
+}
+async function sendDeleteConfirmation(channelId,userId,send) {
   for(const [key,value] of deleteRequests) if(value.expires<Date.now()) deleteRequests.delete(key);
   const key=randomUUID();
-  const confirmation=await message.channel.send({content:`<@${message.author.id}> — dit ticketkanaal definitief verwijderen? De berichten gaan verloren. Deze bevestiging is 60 seconden geldig.`,allowedMentions:{parse:[]},components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`ln-ticket:delete-confirm:${key}`).setLabel('Ticket definitief verwijderen').setStyle(ButtonStyle.Danger).setEmoji('🗑️'))]});
-  deleteRequests.set(key,{channel:message.channelId,user:message.author.id,message:confirmation.id,expires:Date.now()+60000});
+  const confirmation=await send({content:`<@${userId}> — dit ticketkanaal definitief verwijderen? De berichten gaan verloren. Deze bevestiging is 60 seconden geldig.`,allowedMentions:{parse:[]},components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`ln-ticket:delete-confirm:${key}`).setLabel('Ticket definitief verwijderen').setStyle(ButtonStyle.Danger).setEmoji('🗑️'))]});
+  deleteRequests.set(key,{channel:channelId,user:userId,message:confirmation.id,expires:Date.now()+60000});
 }
