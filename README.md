@@ -43,7 +43,7 @@ Tests controleren ranggrenzen, behoud van rollen, datums, opslag over herstarts,
 
 ## Ticketpaneel
 
-Voer na deployment `/ticket-panel` uit in het gewenste tekstkanaal. Het paneel gebruikt het La Noche-logo en een geanimeerde zwart-oranje GIF-banner boven een aparte categoriekaart. Nieuwe ticketembeds gebruiken dezelfde animatie. De GIF loopt vier seconden, bevat 60 frames en is ongeveer 3,4 MB. Discord kan animaties stilzetten afhankelijk van de persoonlijke toegankelijkheids-/autoplayinstellingen.
+Voer na deployment `/ticket-panel` uit in het gewenste tekstkanaal. Het paneel gebruikt het La Noche-logo en een geanimeerde zwart-oranje GIF-banner in dezelfde embed, onder de tekst en boven het keuzemenu. Drugs inkoop en verkoop delen één tekstblok maar blijven aparte menukeuzes. Nieuwe ticketembeds gebruiken dezelfde animatie. De GIF loopt vier seconden, bevat 60 frames en is ongeveer 3,4 MB. Discord kan animaties stilzetten afhankelijk van de persoonlijke toegankelijkheids-/autoplayinstellingen.
 
 - Vier onderwerpen: Sollicitaties, WitWas, Drugs inkoop en Drugs verkoop (roleplay).
 - `/ticket-panel` heeft geen categorie- of rolopties meer: elk onderwerp gebruikt automatisch de vaste koppeling hieronder.

@@ -1,5 +1,5 @@
 import { settings } from './settings.js';
-import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ChannelType, PermissionFlagsBits as P, MessageFlags } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ChannelType, PermissionFlagsBits as P, MessageFlags } from 'discord.js';
 import { branded, field } from './embeds.js';
 import { UserError } from './logic.js';
 export const ticketTypes = [
@@ -15,19 +15,14 @@ async function locked(key, fn) {
 }
 export function panelPayload() {
   const payload = branded('DE NACHT BEGINT HIER.', '**Welkom bij La Noche.**\nLoyaliteit in de familie. Duidelijke afspraken in zaken.\nKies jouw onderwerp en spreek ons team in een privéticket.', [
-    field('📝  SOLLICITATIES', 'Jouw plek in de familie.\nLaat zien wie je bent.', true),
-    field('💸  WITWAS', 'Jouw aanvraag, discreet besproken.\nMaak afspraken met ons team.', true),
-    field('\u200b', '\u200b', true),
-    field('📦  DRUGS INKOOP', 'Voorraad aanbieden?\nBespreek de mogelijkheden.', true),
-    field('🌿  DRUGS VERKOOP', 'Op zoek naar aanbod?\nInformeer bij onze leden.', true),
-    field('\u200b', '\u200b', true),
+    field('📝  SOLLICITATIES', 'Jouw plek in de familie. Laat zien wie je bent.', false),
+    field('💸  WITWAS', 'Jouw aanvraag, discreet besproken. Maak afspraken met ons team.', false),
+    field('📦  DRUGS INKOOP & VERKOOP', 'Voorraad aanbieden of op zoek naar aanbod? Bespreek de mogelijkheden met ons team. Kies hieronder **Drugs inkoop** of **Drugs verkoop**.', false),
     field('☾  DIRECT CONTACT', 'Selecteer hieronder je onderwerp.\n**Privékanaal · Persoonlijke behandeling · Eén open ticket**', false),
   ], 'ticket-banner.gif');
   const card = payload.embeds[0];
-  card.setImage(null).setAuthor(null).setTimestamp(null)
+  card.setAuthor(null).setTimestamp(null)
     .setFooter({text:'LA NOCHE  •  Alle aanvragen gaan over roleplay binnen de server.'});
-  const hero = new EmbedBuilder().setColor(0xff7900).setImage('attachment://ticket-banner.gif');
-  payload.embeds = [hero, card];
   payload.components = [new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('ln-ticket:open').setPlaceholder('☾  OPEN EEN TICKET — kies jouw onderwerp').addOptions(ticketTypes.map(([value,label,emoji,description])=>({value,label,emoji,description}))))];
   return payload;
 }

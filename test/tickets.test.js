@@ -19,8 +19,8 @@ function setup(t) {
  return {store,interaction,changes,sends,guild,createdOptions,creates:()=>creates};
 }
 test('panel contains four categories and serializes Discord embed limits',()=>{
- const p=panelPayload();const e=p.embeds[1].toJSON();const row=p.components[0].toJSON();
- assert.equal(p.embeds[0].toJSON().image.url,'attachment://ticket-banner.gif');assert.equal(p.files[1].name,'ticket-banner.gif');assert.equal(row.components[0].options.length,4);assert.ok(e.description.length<4096);assert.ok(e.fields.length<=25);
+ const p=panelPayload();const e=p.embeds[0].toJSON();const row=p.components[0].toJSON();
+ assert.equal(p.embeds.length,1);assert.equal(e.fields.filter(f=>f.name.includes('DRUGS')).length,1);assert.equal(p.embeds[0].toJSON().image.url,'attachment://ticket-banner.gif');assert.equal(p.files[1].name,'ticket-banner.gif');assert.equal(row.components[0].options.length,4);assert.ok(e.description.length<4096);assert.ok(e.fields.length<=25);
 });
 test('opening creates private ticket and repeat click reuses it',async t=>{
  const s=setup(t);await handleTicketInteraction(s.interaction('open'),'g',s.store);
