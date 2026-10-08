@@ -99,14 +99,13 @@ test('existing one-ticket database migrates and database rejects a third active 
  const store=createStore(dir);
  try {const ticket={guild:'g',channel:'second',user:'u',kind:'witwas',support:null,claimed:null,closed:0,message:'m'};store.addTicket(ticket);assert.throws(()=>store.addTicket({...ticket,channel:'third'}),/max_two_open_tickets/);assert.equal(store.openTickets('g','u').length,2);}finally{store.close();rmSync(dir,{recursive:true,force:true});}
 });
-test('hidden delete requires authorized actor and confirmation; works on closed ticket',async t=>{
- const s=setup(t);await handleTicketInteraction(s.interaction('open'),'g',s.store);s.store.updateTicket('ticket',{closed:1});
+test('hidden delete removes an authorized ticket immediately',async t=>{
+ const s=setup(t);await handleTicketInteraction(s.interaction('open'),'g',s.store);
  let commandRemoved=false;
  const message={guildId:'g',channelId:'ticket',guild:s.guild,channel:s.interaction('close').channel,author:{id:'staff',bot:false},content:'$delete',delete:async()=>{commandRemoved=true;}};
- await handleTicketMessage(message,'g',s.store);assert.equal(commandRemoved,true);assert.equal(s.deleted(),0);
- const id=s.sends.at(-1).components[0].toJSON().components[0].custom_id;
- const wrong=s.interaction('delete-confirm','other');wrong.customId=id;await handleTicketInteraction(wrong,'g',s.store);assert.equal(s.deleted(),0);
- const confirm=s.interaction('delete-confirm','staff');confirm.customId=id;await handleTicketInteraction(confirm,'g',s.store);assert.equal(s.deleted(),1);
+ const count=s.sends.length;
+ await handleTicketMessage(message,'g',s.store);
+ assert.equal(commandRemoved,true);assert.equal(s.deleted(),1);assert.equal(s.sends.length,count);assert.equal(s.store.ticket('ticket').closed,1);
 });
 test('hidden delete ignores ordinary users and non-ticket channels',async t=>{
  const s=setup(t);await handleTicketInteraction(s.interaction('open'),'g',s.store);
@@ -117,15 +116,13 @@ test('hidden delete ignores ordinary users and non-ticket channels',async t=>{
  assert.equal(s.sends.length,count);assert.equal(s.deleted(),0);
 });
 
-test('closed notice offers delete button; authorized user confirms privately',async t=>{
+test('closed notice delete button removes ticket immediately for authorized user',async t=>{
  const s=setup(t);await handleTicketInteraction(s.interaction('open'),'g',s.store);
  await handleTicketInteraction(s.interaction('confirm-close','staff'),'g',s.store);
  const notice=s.sends.at(-1);assert.equal(notice.components[0].toJSON().components[0].custom_id,'ln-ticket:delete-request');
  const request=s.interaction('delete-request','staff');request.message.id='closed-notice';
- await handleTicketInteraction(request,'g',s.store);assert.equal(s.deleted(),0);
- const confirm=s.interaction('delete-confirm','staff');confirm.message.id='confirmation';
- confirm.customId=request.replies.at(-1).components[0].toJSON().components[0].custom_id;
- await handleTicketInteraction(confirm,'g',s.store);assert.equal(s.deleted(),1);
+ await handleTicketInteraction(request,'g',s.store);assert.equal(s.deleted(),1);
+ assert.ok(request.replies.every(p=>!p.components));
 });
 test('delete button rejects regular members and open tickets',async t=>{
  const s=setup(t);await handleTicketInteraction(s.interaction('open'),'g',s.store);
@@ -144,8 +141,7 @@ test('all-ticket role can manage every type and release another handler claim',a
  await handleTicketInteraction(s.interaction('claim','global'),'g',s.store);assert.equal(s.store.ticket('ticket').claimed,'global');
  await handleTicketInteraction(s.interaction('confirm-close','global'),'g',s.store);assert.equal(s.store.ticket('ticket').closed,1);
  const request=s.interaction('delete-request','global');await handleTicketInteraction(request,'g',s.store);
- const confirm=s.interaction('delete-confirm','global');confirm.message.id='confirmation';confirm.customId=request.replies.at(-1).components[0].toJSON().components[0].custom_id;
- await handleTicketInteraction(confirm,'g',s.store);assert.equal(s.deleted(),1);
+ assert.equal(s.deleted(),1);
 });
 test('startup grants global role access to existing open and closed tickets, skips deleted ones',async t=>{
  const s=setup(t);

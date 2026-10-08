@@ -73,11 +73,11 @@ Het ronde logo in het ticketpaneel en ticketembeds is nu `assets/ticket-logo.gif
 
 Bij het openen staat uitsluitend de ingestelde behandelrol in de berichttekst met een expliciete mention-allowlist. Meteen na verzenden wordt alleen de tekst leeggemaakt; de embed, animaties en knoppen blijven staan. De bot krijgt in het ticket een expliciete Mention Everyone-permissie om ook niet-vermeldbare behandelrollen te kunnen pingen. Discord-notificatie-instellingen van ontvangers blijven van toepassing.
 
-`$delete` is een tekstcommando en wordt niet als slashcommand geregistreerd. Het werkt uitsluitend in geregistreerde tickets, ook gesloten tickets, voor de ingestelde behandelrol en beheerders. De invoer wordt indien mogelijk verwijderd. Een bevestigingsknop is 60 seconden geldig en kan alleen door de aanvrager worden gebruikt; bevoegdheden worden opnieuw gecontroleerd. Bevestigen verwijdert het kanaal definitief, zonder transcript.
+`$delete` is een tekstcommando en wordt niet als slashcommand geregistreerd. Het werkt uitsluitend in geregistreerde tickets, ook gesloten tickets, voor de ingestelde behandelrol en beheerders. De invoer wordt indien mogelijk verwijderd. Het commando verwijdert het kanaal direct, zonder extra bevestiging of transcript.
 
 Voor `$delete`: Discord Developer Portal → applicatie → Bot → Privileged Gateway Intents → Message Content Intent aanzetten, opslaan en bot herstarten. Bij opstart controleert de bot de application flags. Als het intent niet beschikbaar is, start de rest van de bot zonder dit tekstcommando door en verschijnt een melding in de logs.
 
-Na sluiten staat onder het sluitingsbericht een rode **Ticket verwijderen**-knop. Alleen de ingestelde behandelrol en beheerders kunnen hiermee een persoonlijke bevestiging openen en het kanaal verwijderen. Deze knop vereist geen Message Content Intent. Eerder geplaatste sluitingsberichten krijgen de knop niet automatisch; daarvoor blijft `$delete` beschikbaar.
+Na sluiten staat onder het sluitingsbericht een rode **Ticket verwijderen**-knop. Alleen de ingestelde behandelrol en beheerders kunnen hiermee het kanaal direct verwijderen, zonder extra bevestiging. Deze knop vereist geen Message Content Intent. Eerder geplaatste sluitingsberichten krijgen de knop niet automatisch; daarvoor blijft `$delete` beschikbaar.
 
 
 ### Algemene ticketbeheerrol

@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { settings } from './settings.js';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ChannelType, PermissionFlagsBits as P, MessageFlags } from 'discord.js';
 import { branded, field } from './embeds.js';
@@ -123,13 +122,6 @@ export async function handleTicketInteraction(i,guildId,store) {
       if(!mayManage(ticket,member)) throw new UserError('Alleen beheerders, de ticketbeheerrol en de bijbehorende behandelrol kunnen tickets beheren.');
       if(action==='delete-request') {
         if(!ticket.closed) throw new UserError('Sluit het ticket eerst voordat je deze knop gebruikt.');
-        return sendDeleteConfirmation(i.channelId,i.user.id,payload=>i.editReply(payload));
-      }
-      if(action==='delete-confirm') {
-        const key=i.customId.split(':')[2];
-        const request=deleteRequests.get(key);
-        if(!request || request.channel!==i.channelId || request.user!==i.user.id || request.message!==i.message.id || request.expires<Date.now()) throw new UserError('Deze bevestiging is verlopen of niet voor jou. Gebruik opnieuw het verwijdercommando.');
-        deleteRequests.delete(key);
         await i.channel.delete(`Ticket verwijderd door ${i.user.id}`);
         store.updateTicket(ticket.channel,{closed:1});
         return i.editReply({content:'Het ticketkanaal is definitief verwijderd.'}).catch(()=>{});
@@ -160,7 +152,6 @@ export async function handleTicketInteraction(i,guildId,store) {
   } catch(e) { if(e instanceof UserError) return i.editReply({content:e.message,allowedMentions:{parse:[]}}); throw e; }
 }
 
-const deleteRequests = new Map();
 export async function handleTicketMessage(message,guildId,store) {
   if(message.guildId!==guildId || message.author.bot || message.webhookId || message.content?.trim()!=='$delete') return;
   const ticket=store.ticket(message.channelId);
@@ -168,13 +159,10 @@ export async function handleTicketMessage(message,guildId,store) {
   const member=await message.guild.members.fetch({user:message.author.id,force:true});
   await message.delete().catch(()=>{});
   if(!mayManage(ticket,member)) return;
-  return sendDeleteConfirmation(message.channelId,message.author.id,payload=>message.channel.send(payload));
-}
-async function sendDeleteConfirmation(channelId,userId,send) {
-  for(const [key,value] of deleteRequests) if(value.expires<Date.now()) deleteRequests.delete(key);
-  const key=randomUUID();
-  const confirmation=await send({content:`<@${userId}> — dit ticketkanaal definitief verwijderen? De berichten gaan verloren. Deze bevestiging is 60 seconden geldig.`,allowedMentions:{parse:[]},components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`ln-ticket:delete-confirm:${key}`).setLabel('Ticket definitief verwijderen').setStyle(ButtonStyle.Danger).setEmoji('🗑️'))]});
-  deleteRequests.set(key,{channel:channelId,user:userId,message:confirmation.id,expires:Date.now()+60000});
+  return locked(`${guildId}:ticket:${message.channelId}`,async()=>{
+    await message.channel.delete(`Ticket verwijderd door ${message.author.id}`);
+    store.updateTicket(ticket.channel,{closed:1});
+  });
 }
 
 export async function syncTicketAccess(guild,store) {
