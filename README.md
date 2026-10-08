@@ -43,7 +43,7 @@ Tests controleren ranggrenzen, behoud van rollen, datums, opslag over herstarts,
 
 ## Ticketpaneel
 
-Voer na deployment `/ticket-panel` uit in het gewenste tekstkanaal. Het paneel gebruikt het bestaande La Noche-logo en de statische zwart-oranje banner.
+Voer na deployment `/ticket-panel` uit in het gewenste tekstkanaal. Het paneel gebruikt het La Noche-logo en een geanimeerde zwart-oranje GIF-banner boven een aparte categoriekaart. Nieuwe ticketembeds gebruiken dezelfde animatie. De GIF loopt vier seconden, bevat 60 frames en is ongeveer 3,4 MB. Discord kan animaties stilzetten afhankelijk van de persoonlijke toegankelijkheids-/autoplayinstellingen.
 
 - Vier onderwerpen: Sollicitaties, WitWas, Drugs inkoop en Drugs verkoop (roleplay).
 - Optioneel `behandelrol`: geeft deze rol toegang tot nieuw aangemaakte tickets. Zonder rol behandelen alleen beheerders tickets.
@@ -57,3 +57,5 @@ Voer na deployment `/ticket-panel` uit in het gewenste tekstkanaal. Het paneel g
 Botrechten: Kanalen bekijken/beheren, Rollen beheren (kanaalrechten aanpassen), Berichten versturen/beheren, Berichtgeschiedenis lezen, Links insluiten en Bestanden bijvoegen. Bestaande ticketkanalen krijgen expliciete toegangsregels en nemen geen openbare categoriepermissies over.
 
 Validatie: `npm test`; Discord-livecontrole gebeurt na deployment met een gewoon lid en een behandelaar.
+
+Bestaand paneel vernieuwen na deployment: voer `/ticket-panel` opnieuw uit in hetzelfde kanaal; de opgeslagen bericht-ID voorkomt een dubbel paneel. Andere meldingen behouden hun bestaande banner.

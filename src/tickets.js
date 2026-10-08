@@ -1,4 +1,4 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ChannelType, PermissionFlagsBits as P, MessageFlags } from 'discord.js';
+import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ChannelType, PermissionFlagsBits as P, MessageFlags } from 'discord.js';
 import { branded, field } from './embeds.js';
 import { UserError } from './logic.js';
 export const ticketTypes = [
@@ -13,9 +13,21 @@ async function locked(key, fn) {
   locks.add(key); try { return await fn(); } finally { locks.delete(key); }
 }
 export function panelPayload() {
-  const payload = branded('☾ LA NOCHE • CONTACT & ZAKEN', '**EÉN FAMILIE. VIER MANIEREN OM BINNEN TE KOMEN.**\n\nEen plek in de familie of een zakelijke afspraak?\nKies hieronder waarvoor je ons wilt spreken. Je krijgt een eigen privékanaal met ons team.', ticketTypes.map(([, label, emoji, description]) => field(`${emoji}  ${label}`, description, true)));
-  payload.embeds[0].addFields(field('JOUW VOLGENDE STAP', '① Kies een onderwerp  →  ② Licht je aanvraag toe  →  ③ Ons team helpt je verder\n\n*Alle aanvragen gaan over roleplay binnen de server.*', false));
-  payload.components = [new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('ln-ticket:open').setPlaceholder('☾ Kies jouw ingang bij La Noche…').addOptions(ticketTypes.map(([value,label,emoji,description])=>({value,label,emoji,description}))))];
+  const payload = branded('DE NACHT BEGINT HIER.', '**Welkom bij La Noche.**\nLoyaliteit in de familie. Duidelijke afspraken in zaken.\nKies jouw onderwerp en spreek ons team in een privéticket.', [
+    field('📝  SOLLICITATIES', 'Jouw plek in de familie.\nLaat zien wie je bent.', true),
+    field('💸  WITWAS', 'Jouw aanvraag, discreet besproken.\nMaak afspraken met ons team.', true),
+    field('\u200b', '\u200b', true),
+    field('📦  DRUGS INKOOP', 'Voorraad aanbieden?\nBespreek de mogelijkheden.', true),
+    field('🌿  DRUGS VERKOOP', 'Op zoek naar aanbod?\nInformeer bij onze leden.', true),
+    field('\u200b', '\u200b', true),
+    field('☾  DIRECT CONTACT', 'Selecteer hieronder je onderwerp.\n**Privékanaal · Persoonlijke behandeling · Eén open ticket**', false),
+  ], 'ticket-banner.gif');
+  const card = payload.embeds[0];
+  card.setImage(null).setAuthor(null).setTimestamp(null)
+    .setFooter({text:'LA NOCHE  •  Alle aanvragen gaan over roleplay binnen de server.'});
+  const hero = new EmbedBuilder().setColor(0xff7900).setImage('attachment://ticket-banner.gif');
+  payload.embeds = [hero, card];
+  payload.components = [new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('ln-ticket:open').setPlaceholder('☾  OPEN EEN TICKET — kies jouw onderwerp').addOptions(ticketTypes.map(([value,label,emoji,description])=>({value,label,emoji,description}))))];
   return payload;
 }
 export function controls(ticket) {
@@ -26,7 +38,7 @@ export function controls(ticket) {
 }
 function ticketPayload(ticket) {
   const type = ticketTypes.find(t=>t[0]===ticket.kind);
-  const payload = branded(`${type[2]} ${type[1].toUpperCase()} • PRIVÉTICKET`, `<@${ticket.user}> — welkom bij **La Noche**.\n\n${ticket.kind==='sollicitaties' ? 'Vertel wie je bent, hoe actief je bent en welke roleplay-ervaring je hebt. Waarom pas jij bij onze familie?' : 'Beschrijf je aanvraag en vermeld de relevante hoeveelheden en afspraken binnen de roleplay.'}\n\nEen teamlid neemt je ticket in behandeling. Je hoeft niemand te blijven taggen.`, [field('Status',ticket.closed ? '🔒 Gesloten' : ticket.claimed ? '🟠 In behandeling' : '🟢 Wacht op een teamlid'),field('Behandelaar',ticket.claimed ? `<@${ticket.claimed}>` : 'Nog niet geclaimd'),field('Ticket van',`<@${ticket.user}>`)]);
+  const payload = branded(`${type[2]} ${type[1].toUpperCase()} • PRIVÉTICKET`, `<@${ticket.user}> — welkom bij **La Noche**.\n\n${ticket.kind==='sollicitaties' ? 'Vertel wie je bent, hoe actief je bent en welke roleplay-ervaring je hebt. Waarom pas jij bij onze familie?' : 'Beschrijf je aanvraag en vermeld de relevante hoeveelheden en afspraken binnen de roleplay.'}\n\nEen teamlid neemt je ticket in behandeling. Je hoeft niemand te blijven taggen.`, [field('Status',ticket.closed ? '🔒 Gesloten' : ticket.claimed ? '🟠 In behandeling' : '🟢 Wacht op een teamlid'),field('Behandelaar',ticket.claimed ? `<@${ticket.claimed}>` : 'Nog niet geclaimd'),field('Ticket van',`<@${ticket.user}>`)], 'ticket-banner.gif');
   payload.components = controls(ticket);
   return payload;
 }
