@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Collection,ButtonStyle} from 'discord.js';
-import {applicationTicketLink,syncApplicationLinks,ticketChannelUrl} from '../src/applications.js';
+import {applicationFields,applicationTicketLink,syncApplicationLinks,ticketChannelUrl} from '../src/applications.js';
 test('application button links to exact requested ticket channel',()=>{
  const button=applicationTicketLink().toJSON().components[0];
  assert.equal(button.style,ButtonStyle.Link);
@@ -16,7 +16,7 @@ test('all history pages updated without repinging, unrelated messages or duplica
  const second=new Collection([['100',message('100')]]);
  const guild={id:'g',client:{user:{id:'bot'}},channels:{fetch:async()=>({messages:{fetch:async options=>{fetches++;if(fetches===1)return first;assert.equal(options.before,'101');return second;}}})}};
  const result=await syncApplicationLinks(guild,{panel:()=>null});
- assert.equal(fetches,2);assert.equal(result.updated,2);assert.equal(result.failed,0);
- assert.deepEqual(edits.map(e=>e.id),['200','100']);
- for(const {payload} of edits){assert.deepEqual(payload.allowedMentions,{parse:[]});assert.deepEqual(Object.keys(payload).sort(),['allowedMentions','components']);}
+ assert.equal(fetches,2);assert.equal(result.updated,3);assert.equal(result.failed,0);
+ assert.deepEqual(edits.map(e=>e.id),['200','198','100']);
+ for(const {payload} of edits){assert.deepEqual(payload.allowedMentions,{parse:[]});assert.deepEqual(payload.embeds[0].fields,applicationFields);assert.equal(payload.content,undefined);assert.equal(payload.attachments,undefined);}
 });
