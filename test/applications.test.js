@@ -18,5 +18,5 @@ test('all history pages updated without repinging, unrelated messages or duplica
  const result=await syncApplicationLinks(guild,{panel:()=>null});
  assert.equal(fetches,2);assert.equal(result.updated,3);assert.equal(result.failed,0);
  assert.deepEqual(edits.map(e=>e.id),['200','198','100']);
- for(const {payload} of edits){assert.deepEqual(payload.allowedMentions,{parse:[]});assert.deepEqual(payload.embeds[0].fields,applicationFields);assert.equal(payload.content,undefined);assert.equal(payload.attachments,undefined);}
+ for(const {payload} of edits){assert.deepEqual(payload.allowedMentions,{parse:[]});assert.deepEqual(payload.embeds[0].fields,applicationFields);assert.equal(payload.content,undefined);assert.deepEqual(payload.attachments,[]);assert.deepEqual(payload.files.map(f=>f.name),['ticket-logo.gif','ticket-banner.gif']);assert.equal(payload.embeds[0].image.url,'attachment://ticket-banner.gif');assert.equal(payload.embeds[0].thumbnail.url,'attachment://ticket-logo.gif');}
 });

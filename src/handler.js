@@ -119,7 +119,7 @@ async function applications(i, store) {
     let saved = store.panel(i.guildId);
     if (saved?.channel !== settings.channels.sollistatus) saved = null;
     const channel = await channelFor(i.guild, settings.channels.sollistatus);
-    const payload = branded('✦ SOLLICITATIES ZIJN GEOPEND', '**LA NOCHE ZOEKT VERSTERKING**\n\nBen jij loyaal, actief en klaar om samen iets op te bouwen? Laat zien wat je in huis hebt en zet de volgende stap bij La Noche.', [...applicationFields,field('Status','🟢 OPEN — nieuwe sollicitaties zijn welkom',false)]);
+    const payload = branded('✦ SOLLICITATIES ZIJN GEOPEND', '**LA NOCHE ZOEKT VERSTERKING**\n\nBen jij loyaal, actief en klaar om samen iets op te bouwen? Laat zien wat je in huis hebt en zet de volgende stap bij La Noche.', [...applicationFields,field('Status','🟢 OPEN — nieuwe sollicitaties zijn welkom',false)],'ticket-banner.gif','ticket-logo.gif');
     payload.components = [applicationTicketLink()];
     payload.content = '<@&1553520983628062810>';
     payload.allowedMentions = { parse: [], roles: ['1553520983628062810'] };
