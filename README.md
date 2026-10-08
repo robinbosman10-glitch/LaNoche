@@ -85,3 +85,12 @@ Na sluiten staat onder het sluitingsbericht een rode **Ticket verwijderen**-knop
 Rol `1557644739703078912` heeft toegang tot alle ticketsoorten en kan claimen, claims vrijgeven (ook van andere behandelaren), sluiten en verwijderen. Bij elk nieuw ticket worden zowel deze rol als de specifieke behandelrol kort getagd en daarna uit de berichttekst gehaald. Bij opstart voegt de bot deze rol ook toe aan eerder opgeslagen ticketkanalen, inclusief gesloten tickets; verwijderde kanalen worden overgeslagen. Controleer de melding `Tickettoegang bijgewerkt` in de logs voor eventuele ontbrekende Discord-rechten. Gewone categoriebehandelaren blijven beperkt tot hun eigen tickets en kunnen alleen hun eigen claim vrijgeven.
 
 `/sollistatus` krijgt onderaan een linkknop naar https://discord.com/channels/1311580149094809650/1553516379921973329. Bij opstart scant de bot alle berichtpagina’s in het ingestelde sollicitatiekanaal en het eventueel eerder opgeslagen sollicitatiekanaal. Eigen bestaande sollicitatieberichten krijgen dezelfde knop zonder nieuwe ping of wijziging van tekst/afbeeldingen. Reeds aanwezige links worden overgeslagen. Hiervoor zijn Bekijk kanaal en Berichtgeschiedenis lezen vereist; de logs vermelden eventuele fouten.
+
+
+## Afwezigheid beoordelen
+
+Nieuwe `/afwezig`-aanvragen verschijnen in het bestaande afwezigheidskanaal met animated banner en logo. Coördinatorrol `1557649156607189015` wordt getagd. Uitsluitend leden met die rol mogen de groene **✅ Goedgekeuren**-knop of rode **❌ Afgekeuren**-knop gebruiken; Administrator geeft geen uitzondering.
+
+Na goedkeuring ontvangt het lid direct afwezigheidsrol `1557648943565774878` en telt de aanvraag mee in het afwezigheidsoverzicht. Afgekeurde en onbeoordeelde aanvragen geven geen rol. De einddatum telt volledig mee in Europe/Amsterdam; daarna wordt de rol binnen ongeveer 30 seconden verwijderd terwijl de bot online is. De controle loopt ook bij opstart, zodat gemiste einddatums na downtime alsnog worden verwerkt. Tijdelijke Discord-fouten worden opnieuw geprobeerd. Aanvragen en beoordelingen blijven opgeslagen in het bestaande `/data`-volume.
+
+De bot moet Rollen beheren hebben, boven de afwezigheidsrol en het lid staan en de coördinatorrol kunnen taggen. Oude afwezigheidsmeldingen van vóór deze update blijven behouden; alleen nieuwe aanvragen krijgen de beoordelingsknoppen en automatische roltoekenning.

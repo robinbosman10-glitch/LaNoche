@@ -14,6 +14,8 @@ export function createStore(directory) {
     BEGIN SELECT RAISE(ABORT, 'max_two_open_tickets'); END;
     CREATE TABLE IF NOT EXISTS activity (guild TEXT, user TEXT, last INTEGER, PRIMARY KEY(guild,user));
     CREATE TABLE IF NOT EXISTS absences (guild TEXT, user TEXT, start INTEGER, end INTEGER, PRIMARY KEY(guild,user));
+    CREATE TABLE IF NOT EXISTS absence_requests (id TEXT PRIMARY KEY, guild TEXT, user TEXT, start INTEGER, end INTEGER, reason TEXT, status TEXT, reviewer TEXT, channel TEXT, message TEXT, dirty INTEGER DEFAULT 1);
+    CREATE UNIQUE INDEX IF NOT EXISTS one_active_absence_request ON absence_requests(guild,user) WHERE status IN ('pending','approving','approved');
     CREATE TABLE IF NOT EXISTS panels (guild TEXT PRIMARY KEY, channel TEXT, message TEXT);
     CREATE TABLE IF NOT EXISTS memberlists (guild TEXT PRIMARY KEY, channel TEXT, messages TEXT);
     CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);`);
@@ -25,6 +27,12 @@ export function createStore(directory) {
     absent(guild,user) { return db.prepare('SELECT start,end FROM absences WHERE guild=? AND user=?').get(guild,user); },
     setAbsent(guild,user,start,end) { db.prepare('INSERT INTO absences VALUES (?,?,?,?) ON CONFLICT(guild,user) DO UPDATE SET start=excluded.start,end=excluded.end').run(guild,user,start,end); },
     clearAbsent(guild,user) { db.prepare('DELETE FROM absences WHERE guild=? AND user=?').run(guild,user); },
+    absenceRequest(id) { return db.prepare('SELECT * FROM absence_requests WHERE id=?').get(id); },
+    absenceRequests(guild) { return db.prepare("SELECT * FROM absence_requests WHERE guild=? AND (status IN ('pending','approving','approved') OR dirty=1)").all(guild); },
+    activeAbsenceRequest(guild,user) { return db.prepare("SELECT * FROM absence_requests WHERE guild=? AND user=? AND status IN ('pending','approving','approved')").get(guild,user); },
+    createAbsenceRequest(r) { db.prepare('INSERT INTO absence_requests (id,guild,user,start,end,reason,status,channel) VALUES (?,?,?,?,?,?,?,?)').run(r.id,r.guild,r.user,r.start,r.end,r.reason,'pending',r.channel); },
+    updateAbsenceRequest(id,patch) { const r={...this.absenceRequest(id),...patch}; db.prepare('UPDATE absence_requests SET status=?,reviewer=?,message=?,dirty=? WHERE id=?').run(r.status,r.reviewer??null,r.message??null,r.dirty,id); },
+    deleteAbsenceRequest(id) { db.prepare('DELETE FROM absence_requests WHERE id=?').run(id); },
     panel(guild) { return db.prepare('SELECT channel,message FROM panels WHERE guild=?').get(guild); },
     setPanel(guild,channel,message) { db.prepare('INSERT INTO panels VALUES (?,?,?) ON CONFLICT(guild) DO UPDATE SET channel=excluded.channel,message=excluded.message').run(guild,channel,message); },
     list(guild) { const row = db.prepare('SELECT channel,messages FROM memberlists WHERE guild=?').get(guild); return row ? {...row, messages: JSON.parse(row.messages)} : null; },

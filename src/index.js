@@ -1,3 +1,4 @@
+import { handleAbsenceInteraction, refreshAbsences } from './absences.js';
 import { syncApplicationLinks } from './applications.js';
 import { handleTicketInteraction, handleTicketMessage, syncTicketAccess } from './tickets.js';
 import { invalidateMembers } from './member-cache.js';
@@ -27,8 +28,10 @@ try {
 const client = new Client({ intents, allowedMentions: { parse: [] } });
 let ready = false;
 let refreshTimer;
+let absenceTimer;
+let absenceRefreshing=false;
 let liveRefresh;
-function stop(code) { clearInterval(refreshTimer); liveRefresh?.stop(); client.destroy(); store.close(); process.exit(code); }
+function stop(code) { clearInterval(refreshTimer); clearInterval(absenceTimer); liveRefresh?.stop(); client.destroy(); store.close(); process.exit(code); }
 function logError(label, error) {
   // Do not log request bodies, headers, tokens or interaction payloads.
   console.error(`${label} (${error?.code ?? error?.name ?? 'onbekend'})`);
@@ -39,6 +42,16 @@ client.once(Events.ClientReady, async current => {
     // Own dedicated application: synchronizes exactly the 10 commands in this guild.
     await guild.commands.set(commands);
     ready = true;
+    const refreshAbsenceRoles=async()=>{
+      if(absenceRefreshing)return;
+      absenceRefreshing=true;
+      try {const result=await refreshAbsences(guild,store);if(result.failed)console.error(`Afwezigheid bijwerken mislukt voor ${result.failed} aanvragen; wordt opnieuw geprobeerd.`);}
+      catch(error){logError('Afwezigheid bijwerken mislukt',error);}
+      finally{absenceRefreshing=false;}
+    };
+    void refreshAbsenceRoles();
+    absenceTimer=setInterval(refreshAbsenceRoles,30000);
+    absenceTimer.unref();
     syncApplicationLinks(guild,store).then(result=>{
       console.log(`Sollicitatieknoppen bijgewerkt: ${result.updated}; mislukt: ${result.failed}.`);
     }).catch(error=>logError('Sollicitatieknoppen bijwerken mislukt',error));
@@ -54,14 +67,16 @@ client.once(Events.ClientReady, async current => {
   } catch (error) { logError('Commands registreren mislukt; controleer GUILD_ID en de botuitnodiging', error); stop(1); }
 });
 client.on(Events.InteractionCreate, async interaction => {
+  const absence=interaction.isButton() && interaction.customId.startsWith('ln-absence:');
   const ticket = (interaction.isButton() || interaction.isStringSelectMenu()) && interaction.customId.startsWith('ln-ticket:');
-  if (!ticket && !interaction.isChatInputCommand() && !(interaction.isModalSubmit() && interaction.customId === 'lanoche:afwezig')) return;
+  if (!absence && !ticket && !interaction.isChatInputCommand() && !(interaction.isModalSubmit() && interaction.customId === 'lanoche:afwezig')) return;
   try {
     if (!ready) {
       await interaction.reply({ content: 'De bot start nog op. Probeer het zo opnieuw.', flags: MessageFlags.Ephemeral });
       return;
     }
-    if (ticket) await handleTicketInteraction(interaction, config.guildId, store);
+    if (absence) await handleAbsenceInteraction(interaction,config.guildId,store);
+    else if (ticket) await handleTicketInteraction(interaction, config.guildId, store);
     else await handleInteraction(interaction, config.guildId, store);
   } catch (error) {
     logError('Command uitvoeren mislukt', error);

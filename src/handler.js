@@ -1,3 +1,4 @@
+import { submitAbsenceRequest } from './absences.js';
 import { applicationTicketLink } from './applications.js';
 import { publishTicketPanel } from './tickets.js';
 import { getMembers } from './member-cache.js';
@@ -5,7 +6,7 @@ import { ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, Messa
 import { definitions } from './commands.js';
 import { settings } from './settings.js';
 import { branded, field } from './embeds.js';
-import { absenceDates, nextRank, removableRoles, UserError } from './logic.js';
+import { nextRank, removableRoles, UserError } from './logic.js';
 import { updateMemberlist } from './memberlist.js';
 const locks = new Set();
 const stamp = ms => `<t:${Math.floor(ms / 1000)}:d>`;
@@ -93,19 +94,6 @@ function absenceModal() {
   }
   return modal;
 }
-async function submitAbsence(i, store) {
-  return withLock(`${i.guildId}:member:${i.user.id}`, async () => {
-    const dates = absenceDates(i.fields.getTextInputValue('begin').trim(), i.fields.getTextInputValue('eind').trim());
-    if (store.absent(i.guildId,i.user.id)?.end >= Date.now()) throw new UserError('Je hebt al een actieve of geplande afwezigheidsmelding.');
-    const channel = await channelFor(i.guild, settings.channels.afwezig);
-    const payload = branded('☾ EVEN AFWEZIG. NOG STEEDS FAMILIE.', `<@${i.user.id}> heeft een afwezigheid doorgegeven.`, [field('Van',stamp(dates.start)),field('Tot en met',stamp(dates.end)),field('Reden',escapeMarkdown(i.fields.getTextInputValue('reden')),false)]);
-    store.setAbsent(i.guildId,i.user.id,dates.start,dates.end);
-    let message;
-    try { message = await channel.send(payload); }
-    catch (error) { store.clearAbsent(i.guildId,i.user.id); throw error; }
-    await i.editReply({content:`Je afwezigheid is geregistreerd tot en met ${stamp(dates.end)}.\n${message.url}`});
-  });
-}
 async function inactivity(i, store) {
   const channel = await channelFor(i.guild, i.channelId);
   const members = await getMembers(i.guild);
@@ -156,7 +144,7 @@ export async function handleInteraction(i, guildId, store) {
   if (!modal && i.commandName==='afwezig') return i.showModal(absenceModal());
   await i.deferReply({flags:MessageFlags.Ephemeral});
   try {
-    if (modal) return await submitAbsence(i,store);
+    if (modal) return await submitAbsenceRequest(i,store);
     if (['aangenomen','ontslaan','promotie','demote'].includes(i.commandName)) return await roleAction(i,store);
     if (i.commandName==='discordinactief') return await inactivity(i,store);
     if (i.commandName==='ledenlijst') { const url = await updateMemberlist(i.guild,store,i.channelId); return await i.editReply({content:`De ledenlijst is bijgewerkt.\n${url}`}); }

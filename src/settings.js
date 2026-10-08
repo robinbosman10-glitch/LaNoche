@@ -1,4 +1,6 @@
 export const settings = {
+  absenceReviewerRole: '1557649156607189015',
+  absenceRole: '1557648943565774878',
   allTicketRole: '1557644739703078912',
   tickets: {
     sollicitaties: { parent: '1557638802934337616', support: '1328812727287677061' },
