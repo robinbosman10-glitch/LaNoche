@@ -1,3 +1,4 @@
+import {createTranscriptServer,transcriptBase} from './transcript-web.js';
 import { flushAudit, handleTranscript, upgradeTicketLogs } from './audit.js';
 import { handleAbsenceInteraction, refreshAbsences, resetAbsencesOnce, absenceResetVersion } from './absences.js';
 import { syncApplicationLinks } from './applications.js';
@@ -19,6 +20,10 @@ try { config = readConfig(); }
 catch (error) { console.error(error.message); process.exit(1); }
 
 const store = createStore(process.env.DATA_DIR || './data');
+transcriptBase(); // Validate configured public origin before publishing links.
+const web=createTranscriptServer(store);
+web.on('error',()=>{console.error('Transcriptwebsite starten mislukt. Controleer PORT.');process.exit(1);});
+web.listen(Number(process.env.PORT||3000),'0.0.0.0');
 const intents=[GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages];
 try {
   const application=await new REST({version:'10'}).setToken(config.token).get(Routes.currentApplication());
@@ -33,7 +38,7 @@ let absenceTimer;
 let auditTimer;
 let absenceRefreshing=false;
 let liveRefresh;
-function stop(code) { clearInterval(refreshTimer); clearInterval(absenceTimer); clearInterval(auditTimer); liveRefresh?.stop(); client.destroy(); store.close(); process.exit(code); }
+function stop(code) { web.close(); clearInterval(refreshTimer); clearInterval(absenceTimer); clearInterval(auditTimer); liveRefresh?.stop(); client.destroy(); store.close(); process.exit(code); }
 function logError(label, error) {
   // Do not log request bodies, headers, tokens or interaction payloads.
   console.error(`${label} (${error?.code ?? error?.name ?? 'onbekend'})`);

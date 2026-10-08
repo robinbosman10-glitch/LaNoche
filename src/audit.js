@@ -1,3 +1,4 @@
+import {transcriptBase,transcriptLink} from './transcript-web.js';
 import {captureTranscript} from './transcripts.js';
 import {AttachmentBuilder,ActionRowBuilder,ButtonBuilder,ButtonStyle,escapeMarkdown} from 'discord.js';
 import {branded,field} from './embeds.js';
@@ -55,7 +56,11 @@ export async function flushAudit(guild,store) {
       const payload=auditPayload({...event,closed:event.action==='deleted'?closed:null});
       const transcript=event.transcript||closed?.transcript;
       if(transcript)payload.files.push(new AttachmentBuilder(Buffer.from(transcript.html),{name:transcript.name}));
-      payload.components=transcript?[new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`ln-transcript:${event.channel}`).setStyle(ButtonStyle.Secondary).setLabel('Transcript bekijken').setEmoji('📄'))]:[];
+      const link=transcript?transcriptLink(store,guild.id,event.channel):null;
+      const button=new ButtonBuilder().setLabel('Transcript bekijken').setEmoji('📄');
+      if(link)button.setStyle(ButtonStyle.Link).setURL(link);
+      else button.setStyle(ButtonStyle.Secondary).setCustomId(`ln-transcript:${event.channel}`);
+      payload.components=transcript?[new ActionRowBuilder().addComponents(button)]:[];
       const saved=store.ticketLog(guild.id,event.channel);
       let message;
       if(saved?.channel===id) {
@@ -80,13 +85,15 @@ export async function handleTranscript(i,store) {
  if(!i.channel.permissionsFor(member)?.has(1024n))return i.editReply({content:'Je hebt geen toegang tot dit logkanaal.'});
  const event=store.auditEvent(`ticket:${id}:deleted`)||store.auditEvent(`ticket:${id}:closed`);
  if(!event?.transcript)return i.editReply({content:'Van dit ticket is geen transcript beschikbaar.'});
+ const link=transcriptLink(store,i.guildId,id);
+ if(link)return i.editReply({content:'📄 Open het tickettranscript:',components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Transcript openen').setURL(link))]});
  return i.editReply({content:'📄 Download het La Noche-transcript en open het in je browser.',files:[new AttachmentBuilder(Buffer.from(event.transcript.html),{name:event.transcript.name})]});
 }
 export async function upgradeTicketLogs(guild,store) {
  if(upgrading.has(guild.id))return;
  upgrading.add(guild.id);
  try {
- const key=`ticketLogUpgrade:${guild.id}:v2`;
+ const key=`ticketLogUpgrade:${guild.id}:v3:${transcriptBase()||'download'}`;
  if(store.auditMigrationDone(key))return;
  const channel=await guild.channels.fetch(settings.channels.ticketLogs);
  const tickets=new Map(store.tickets(guild.id).map(t=>[t.channel,t]));

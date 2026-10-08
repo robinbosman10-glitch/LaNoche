@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -12,6 +13,7 @@ export function createStore(directory) {
     CREATE TRIGGER IF NOT EXISTS max_two_open_tickets BEFORE INSERT ON tickets
     WHEN NEW.closed=0 AND (SELECT COUNT(*) FROM tickets WHERE guild=NEW.guild AND user=NEW.user AND closed=0)>=2
     BEGIN SELECT RAISE(ABORT, 'max_two_open_tickets'); END;
+    CREATE TABLE IF NOT EXISTS transcript_links (guild TEXT, ticket TEXT, token TEXT UNIQUE, PRIMARY KEY(guild,ticket));
     CREATE TABLE IF NOT EXISTS ticket_log_messages (guild TEXT, ticket TEXT, channel TEXT, message TEXT, PRIMARY KEY(guild,ticket));
     CREATE TABLE IF NOT EXISTS audit_outbox (id TEXT PRIMARY KEY, guild TEXT, payload TEXT, sent INTEGER DEFAULT 0);
     CREATE TABLE IF NOT EXISTS activity (guild TEXT, user TEXT, last INTEGER, PRIMARY KEY(guild,user));
@@ -23,6 +25,11 @@ export function createStore(directory) {
     CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);`);
   db.prepare('INSERT OR IGNORE INTO meta VALUES (?,?)').run('trackingStart', String(Date.now()));
   return {
+    transcriptToken(guild,ticket) {
+      db.prepare('INSERT OR IGNORE INTO transcript_links VALUES (?,?,?)').run(guild,ticket,randomBytes(32).toString('hex'));
+      return db.prepare('SELECT token FROM transcript_links WHERE guild=? AND ticket=?').get(guild,ticket).token;
+    },
+    transcriptByToken(token) {return db.prepare('SELECT guild,ticket FROM transcript_links WHERE token=?').get(token);},
     auditMigrationDone(key) {return Boolean(db.prepare('SELECT value FROM meta WHERE key=?').get(key));},
     finishAuditMigration(key) {db.prepare('INSERT OR REPLACE INTO meta VALUES (?,?)').run(key,'done');},
     replaceAudit(event) {db.prepare('UPDATE audit_outbox SET payload=?,sent=0 WHERE id=?').run(JSON.stringify(event),event.id);},
