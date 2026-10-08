@@ -72,20 +72,23 @@ async function openTicket(i,store) {
     if(active.length>=2) return i.editReply({content:`Je hebt al twee open tickets: ${active.map(t=>`<#${t.channel}>`).join(' en ')}. Sluit eerst een ticket.`});
     const me=await i.guild.members.fetchMe();
     if(!me.permissions.has(P.ManageChannels)) throw new UserError('Ik mis de toestemming Kanalen beheren.');
-    const role=await i.guild.roles.fetch(route.support);
-    if(!role || role.id===i.guildId || role.managed) throw new UserError('De behandelrol ontbreekt of is ongeldig. Laat het beheer de ticketinstellingen controleren.');
+    const supportRoles=[...new Set([route.support,settings.allTicketRole])];
+    for (const id of supportRoles) {
+      const role=await i.guild.roles.fetch(id);
+      if(!role || role.id===i.guildId || role.managed) throw new UserError('Een behandelrol ontbreekt of is ongeldig. Laat het beheer de ticketinstellingen controleren.');
+    }
     if(route.parent && (await i.guild.channels.fetch(route.parent))?.type!==ChannelType.GuildCategory) throw new UserError('De ingestelde ticketcategorie ontbreekt of is ongeldig. Laat het beheer de ticketinstellingen controleren.');
     const allow=[P.ViewChannel,P.SendMessages,P.ReadMessageHistory,P.AttachFiles,P.EmbedLinks];
     const overwrites=[{id:i.guildId,deny:[P.ViewChannel]}, {id:me.id,allow:[...allow,P.ManageChannels,P.ManageMessages,P.MentionEveryone]}, {id:i.user.id,allow}];
-    if(route.support) overwrites.push({id:route.support,allow});
+    for(const id of supportRoles) overwrites.push({id,allow});
     const name=i.user.username.toLowerCase().replace(/[^a-z0-9-]/g,'').slice(0,30)||'lid';
     const channel=await i.guild.channels.create({name:`${kind}-${name}`,type:ChannelType.GuildText,parent:route.parent||undefined,permissionOverwrites:overwrites,topic:`La Noche | ${kind} | ${i.user.id}`,reason:`Ticket geopend door ${i.user.id}`});
     const ticket={guild:i.guildId,channel:channel.id,user:i.user.id,kind,support:route.support,claimed:null,closed:0,message:null};
     let message;
     try {
       const payload=ticketPayload(ticket);
-      payload.content=`<@&${route.support}>`;
-      payload.allowedMentions={parse:[],roles:[route.support]};
+      payload.content=supportRoles.map(id=>`<@&${id}>`).join(' ');
+      payload.allowedMentions={parse:[],roles:supportRoles};
       message=await channel.send(payload);
       ticket.message=message.id;
       store.addTicket(ticket);
@@ -106,7 +109,7 @@ async function openTicket(i,store) {
     await i.editReply({content:`Je privéticket is geopend: <#${channel.id}>.`});
   });
 }
-export function mayManage(ticket,member) { return member.permissions.has(P.Administrator) || Boolean(ticket.support && member.roles.cache.has(ticket.support)); }
+export function mayManage(ticket,member) { return member.permissions.has(P.Administrator) || member.roles.cache.has(settings.allTicketRole) || Boolean(ticket.support && member.roles.cache.has(ticket.support)); }
 export async function handleTicketInteraction(i,guildId,store) {
   if(!i.inGuild() || i.guildId!==guildId) return i.reply({content:'Dit paneel hoort bij de La Noche-server.',flags:MessageFlags.Ephemeral});
   await i.deferReply({flags:MessageFlags.Ephemeral});
@@ -117,7 +120,7 @@ export async function handleTicketInteraction(i,guildId,store) {
       const ticket=store.ticket(i.channelId);
       if(!ticket || ticket.guild!==i.guildId) throw new UserError('Dit kanaal is geen geregistreerd ticket.');
       const member=await i.guild.members.fetch({user:i.user.id,force:true});
-      if(!mayManage(ticket,member)) throw new UserError('Alleen beheerders en de ingestelde behandelrol kunnen tickets beheren.');
+      if(!mayManage(ticket,member)) throw new UserError('Alleen beheerders, de ticketbeheerrol en de bijbehorende behandelrol kunnen tickets beheren.');
       if(action==='delete-request') {
         if(!ticket.closed) throw new UserError('Sluit het ticket eerst voordat je deze knop gebruikt.');
         return sendDeleteConfirmation(i.channelId,i.user.id,payload=>i.editReply(payload));
@@ -139,7 +142,7 @@ export async function handleTicketInteraction(i,guildId,store) {
         ticket.claimed=i.user.id;
       } else if(action==='unclaim') {
         if(!ticket.claimed) throw new UserError('Dit ticket is nog niet geclaimd.');
-        if(ticket.claimed!==i.user.id && !member.permissions.has(P.Administrator)) throw new UserError('Alleen de behandelaar of een beheerder kan deze claim vrijgeven.');
+        if(ticket.claimed!==i.user.id && !member.permissions.has(P.Administrator) && !member.roles.cache.has(settings.allTicketRole)) throw new UserError('Alleen de behandelaar, de ticketbeheerrol of een beheerder kan deze claim vrijgeven.');
         ticket.claimed=null;
       } else if(action==='confirm-close') {
         await i.channel.permissionOverwrites.edit(ticket.user,{SendMessages:false,AddReactions:false,CreatePublicThreads:false,CreatePrivateThreads:false,SendMessagesInThreads:false});
@@ -172,4 +175,22 @@ async function sendDeleteConfirmation(channelId,userId,send) {
   const key=randomUUID();
   const confirmation=await send({content:`<@${userId}> — dit ticketkanaal definitief verwijderen? De berichten gaan verloren. Deze bevestiging is 60 seconden geldig.`,allowedMentions:{parse:[]},components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`ln-ticket:delete-confirm:${key}`).setLabel('Ticket definitief verwijderen').setStyle(ButtonStyle.Danger).setEmoji('🗑️'))]});
   deleteRequests.set(key,{channel:channelId,user:userId,message:confirmation.id,expires:Date.now()+60000});
+}
+
+export async function syncTicketAccess(guild,store) {
+  const role=await guild.roles.fetch(settings.allTicketRole);
+  if(!role || role.managed || role.id===guild.id) throw new UserError('De algemene ticketbeheerrol ontbreekt of is ongeldig.');
+  const required=[P.ViewChannel,P.SendMessages,P.ReadMessageHistory,P.AttachFiles,P.EmbedLinks];
+  const result={updated:0,failed:0};
+  for(const ticket of store.tickets(guild.id)) {
+    try {
+      const channel=await guild.channels.fetch(ticket.channel);
+      if(!channel || !channel.permissionOverwrites) continue;
+      const overwrite=channel.permissionOverwrites.cache?.get(settings.allTicketRole);
+      if(overwrite?.allow.has(required) && !overwrite.deny.any(required)) continue;
+      await channel.permissionOverwrites.edit(settings.allTicketRole,{ViewChannel:true,SendMessages:true,ReadMessageHistory:true,AttachFiles:true,EmbedLinks:true}, {reason:'La Noche: algemene ticketbeheerrol toevoegen'});
+      result.updated++;
+    } catch(error) { if(error.code!==10003) result.failed++; }
+  }
+  return result;
 }

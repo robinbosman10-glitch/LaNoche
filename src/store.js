@@ -31,6 +31,7 @@ export function createStore(directory) {
     setList(guild,channel,messages) { db.prepare('INSERT INTO memberlists VALUES (?,?,?) ON CONFLICT(guild) DO UPDATE SET channel=excluded.channel,messages=excluded.messages').run(guild,channel,JSON.stringify(messages)); },
     ticketPanel(guild,channel) { return db.prepare('SELECT * FROM ticket_panels WHERE guild=? AND channel=?').get(guild,channel); },
     setTicketPanel(guild,channel,message,support,parent) { db.prepare('INSERT INTO ticket_panels VALUES (?,?,?,?,?) ON CONFLICT(guild,channel) DO UPDATE SET message=excluded.message,support=excluded.support,parent=excluded.parent').run(guild,channel,message,support,parent); },
+    tickets(guild) { return db.prepare('SELECT * FROM tickets WHERE guild=?').all(guild); },
     ticket(channel) { return db.prepare('SELECT * FROM tickets WHERE channel=?').get(channel); },
     openTickets(guild,user) { return db.prepare('SELECT * FROM tickets WHERE guild=? AND user=? AND closed=0').all(guild,user); },
     openTicket(guild,user) { return db.prepare('SELECT * FROM tickets WHERE guild=? AND user=? AND closed=0').get(guild,user); },

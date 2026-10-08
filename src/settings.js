@@ -1,4 +1,5 @@
 export const settings = {
+  allTicketRole: '1557644739703078912',
   tickets: {
     sollicitaties: { parent: '1557638802934337616', support: '1328812727287677061' },
     'drugs-inkoop': { parent: '1557639006991155271', support: '1311585567921934367' },

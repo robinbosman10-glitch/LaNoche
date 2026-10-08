@@ -7,7 +7,7 @@ import {join} from 'node:path';
 import {ChannelType,PermissionsBitField,PermissionFlagsBits as P} from 'discord.js';
 import {settings} from '../src/settings.js';
 import {createStore} from '../src/store.js';
-import {panelPayload,handleTicketInteraction,handleTicketMessage} from '../src/tickets.js';
+import {panelPayload,handleTicketInteraction,handleTicketMessage,syncTicketAccess} from '../src/tickets.js';
 const admin={permissions:new PermissionsBitField(P.Administrator),roles:{cache:new Map()}};
 function setup(t) {
  const dir=mkdtempSync(join(tmpdir(),'ln-tickets-')); const store=createStore(dir);
@@ -66,9 +66,9 @@ for (const [kind,parent,support] of [
  const s=setup(t);const i=s.interaction('open');i.values=[kind];
  await handleTicketInteraction(i,'g',s.store);
  assert.equal(s.createdOptions[0].parent,parent);
- assert.deepEqual(s.createdOptions[0].permissionOverwrites.map(o=>o.id),['g','bot','user',support]);
+ assert.deepEqual(s.createdOptions[0].permissionOverwrites.map(o=>o.id),['g','bot','user',support,settings.allTicketRole]);
  assert.equal(s.store.ticket('ticket').support,support);
- assert.equal(s.sends[0].content,`<@&${support}>`);assert.deepEqual(s.sends[0].allowedMentions,{parse:[],roles:[support]});
+ assert.equal(s.sends[0].content,`<@&${support}> <@&${settings.allTicketRole}>`);assert.deepEqual(s.sends[0].allowedMentions,{parse:[],roles:[support,settings.allTicketRole]});
  assert.deepEqual(s.changes[0],{content:'',allowedMentions:{parse:[]}});
  s.guild.members.fetch=async()=>({permissions:new PermissionsBitField(),roles:{cache:new Map([['unrelated-role',{}]])}});
  await handleTicketInteraction(s.interaction('claim','other-staff'),'g',s.store);
@@ -134,4 +134,24 @@ test('delete button rejects regular members and open tickets',async t=>{
  s.guild.members.fetch=async()=>({permissions:new PermissionsBitField(),roles:{cache:new Map()}});
  const denied=s.interaction('delete-request');await handleTicketInteraction(denied,'g',s.store);
  assert.match(denied.replies.at(-1).content,/Alleen beheerders/);assert.equal(s.deleted(),0);
+});
+
+test('all-ticket role can manage every type and release another handler claim',async t=>{
+ const s=setup(t);await handleTicketInteraction(s.interaction('open'),'g',s.store);
+ await handleTicketInteraction(s.interaction('claim','assigned'),'g',s.store);
+ s.guild.members.fetch=async()=>({permissions:new PermissionsBitField(),roles:{cache:new Map([[settings.allTicketRole,{}]])}});
+ await handleTicketInteraction(s.interaction('unclaim','global'),'g',s.store);assert.equal(s.store.ticket('ticket').claimed,null);
+ await handleTicketInteraction(s.interaction('claim','global'),'g',s.store);assert.equal(s.store.ticket('ticket').claimed,'global');
+ await handleTicketInteraction(s.interaction('confirm-close','global'),'g',s.store);assert.equal(s.store.ticket('ticket').closed,1);
+ const request=s.interaction('delete-request','global');await handleTicketInteraction(request,'g',s.store);
+ const confirm=s.interaction('delete-confirm','global');confirm.message.id='confirmation';confirm.customId=request.replies.at(-1).components[0].toJSON().components[0].custom_id;
+ await handleTicketInteraction(confirm,'g',s.store);assert.equal(s.deleted(),1);
+});
+test('startup grants global role access to existing open and closed tickets, skips deleted ones',async t=>{
+ const s=setup(t);
+ for(const [channel,closed] of [['open',0],['closed',1],['deleted',1]]) s.store.addTicket({guild:'g',channel,user:channel,kind:'witwas',support:'old',claimed:null,closed,message:'m'});
+ const edits=[];s.guild.channels.fetch=async id=>id==='deleted'?null:{permissionOverwrites:{cache:new Map(),edit:async(...args)=>edits.push({channel:id,args})}};
+ const result=await syncTicketAccess(s.guild,s.store);
+ assert.equal(result.updated,2);assert.equal(result.failed,0);assert.deepEqual(edits.map(e=>e.channel),['open','closed']);
+ for(const e of edits){assert.equal(e.args[0],settings.allTicketRole);assert.equal(e.args[1].ViewChannel,true);assert.equal(e.args[1].SendMessages,true);}
 });

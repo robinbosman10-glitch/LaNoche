@@ -1,4 +1,4 @@
-import { handleTicketInteraction, handleTicketMessage } from './tickets.js';
+import { handleTicketInteraction, handleTicketMessage, syncTicketAccess } from './tickets.js';
 import { invalidateMembers } from './member-cache.js';
 import { existsSync } from 'node:fs';
 import { Client, Events, GatewayIntentBits, MessageFlags, ActivityType, REST, Routes, ApplicationFlagsBitField } from 'discord.js';
@@ -38,6 +38,9 @@ client.once(Events.ClientReady, async current => {
     // Own dedicated application: synchronizes exactly the 10 commands in this guild.
     await guild.commands.set(commands);
     ready = true;
+    syncTicketAccess(guild,store).then(result=>{
+      console.log(`Tickettoegang bijgewerkt: ${result.updated}; mislukt: ${result.failed}.`);
+    }).catch(error=>logError('Tickettoegang bijwerken mislukt',error));
     liveRefresh = createLiveRefresh(() => updateMemberlist(guild,store), error=>logError('Ledenlijst bijwerken mislukt',error));
     liveRefresh.schedule();
     refreshTimer = setInterval(() => liveRefresh.schedule(), 5 * 60 * 1000);

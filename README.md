@@ -78,3 +78,8 @@ Bij het openen staat uitsluitend de ingestelde behandelrol in de berichttekst me
 Voor `$delete`: Discord Developer Portal → applicatie → Bot → Privileged Gateway Intents → Message Content Intent aanzetten, opslaan en bot herstarten. Bij opstart controleert de bot de application flags. Als het intent niet beschikbaar is, start de rest van de bot zonder dit tekstcommando door en verschijnt een melding in de logs.
 
 Na sluiten staat onder het sluitingsbericht een rode **Ticket verwijderen**-knop. Alleen de ingestelde behandelrol en beheerders kunnen hiermee een persoonlijke bevestiging openen en het kanaal verwijderen. Deze knop vereist geen Message Content Intent. Eerder geplaatste sluitingsberichten krijgen de knop niet automatisch; daarvoor blijft `$delete` beschikbaar.
+
+
+### Algemene ticketbeheerrol
+
+Rol `1557644739703078912` heeft toegang tot alle ticketsoorten en kan claimen, claims vrijgeven (ook van andere behandelaren), sluiten en verwijderen. Bij elk nieuw ticket worden zowel deze rol als de specifieke behandelrol kort getagd en daarna uit de berichttekst gehaald. Bij opstart voegt de bot deze rol ook toe aan eerder opgeslagen ticketkanalen, inclusief gesloten tickets; verwijderde kanalen worden overgeslagen. Controleer de melding `Tickettoegang bijgewerkt` in de logs voor eventuele ontbrekende Discord-rechten. Gewone categoriebehandelaren blijven beperkt tot hun eigen tickets en kunnen alleen hun eigen claim vrijgeven.
