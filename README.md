@@ -46,9 +46,15 @@ Tests controleren ranggrenzen, behoud van rollen, datums, opslag over herstarts,
 Voer na deployment `/ticket-panel` uit in het gewenste tekstkanaal. Het paneel gebruikt het La Noche-logo en een geanimeerde zwart-oranje GIF-banner boven een aparte categoriekaart. Nieuwe ticketembeds gebruiken dezelfde animatie. De GIF loopt vier seconden, bevat 60 frames en is ongeveer 3,4 MB. Discord kan animaties stilzetten afhankelijk van de persoonlijke toegankelijkheids-/autoplayinstellingen.
 
 - Vier onderwerpen: Sollicitaties, WitWas, Drugs inkoop en Drugs verkoop (roleplay).
-- Optioneel `behandelrol`: geeft deze rol toegang tot nieuw aangemaakte tickets. Zonder rol behandelen alleen beheerders tickets.
-- Optioneel `categorie`: Discord-categorie waaronder nieuwe tickets verschijnen. Zonder categorie staan ze op serverniveau.
-- Opnieuw uitvoeren in hetzelfde kanaal werkt het bestaande paneel bij. Eerder gekozen rol/categorie blijven behouden als je opties weglaat. Wijzigingen gelden voor nieuwe tickets.
+- `/ticket-panel` heeft geen categorie- of rolopties meer: elk onderwerp gebruikt automatisch de vaste koppeling hieronder.
+- Opnieuw uitvoeren in hetzelfde kanaal werkt het bestaande paneel bij. De koppelingen gelden direct voor nieuwe tickets, ook vanuit bestaande panelen. Eerder geopende tickets behouden hun bestaande kanaal en behandelrol.
+
+| Ticketsoort | Discord-categorie | Behandelrol (naast beheerders) |
+| --- | --- | --- |
+| Sollicitaties | 1557638802934337616 | 1328812727287677061 |
+| Drugs inkoop / verkoop | 1557639006991155271 | 1311585567921934367 |
+| WitWas | 1557639163807932516 | 1384749084694286356 |
+
 - Eén open ticket per gebruiker. Privétoegang voor de aanvrager, behandelrol, bot en serverbeheerders.
 - Het eerste ticketbericht heeft Claimen, Unclaimen en Sluiten. Het wordt indien mogelijk vastgepind. Alleen de behandelaar of een beheerder kan een claim vrijgeven.
 - Sluiten vraagt bevestiging, maakt het ticket alleen-lezen voor de aanvrager en bewaart het gesprek. Een serverbeheerder behoudt zijn Discord-bevoegdheden.

@@ -1,3 +1,4 @@
+import { settings } from './settings.js';
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ChannelType, PermissionFlagsBits as P, MessageFlags } from 'discord.js';
 import { branded, field } from './embeds.js';
 import { UserError } from './logic.js';
@@ -44,10 +45,6 @@ function ticketPayload(ticket) {
 }
 export async function publishTicketPanel(i, store) {
   return locked(`${i.guildId}:panel`, async()=>{
-    const support = i.options.getRole('behandelrol');
-    if (support && (support.id===i.guildId || support.managed)) throw new UserError('Kies een gewone behandelrol, niet @everyone of een botrol.');
-    const parent = i.options.getChannel('categorie');
-    if (parent && parent.type!==ChannelType.GuildCategory) throw new UserError('Kies een Discord-categorie.');
     if (!i.channel?.send || i.channel.isThread()) throw new UserError('Plaats het paneel in een gewoon tekstkanaal.');
     const old = store.ticketPanel(i.guildId,i.channelId);
     const payload=panelPayload();
@@ -57,8 +54,8 @@ export async function publishTicketPanel(i, store) {
     }
     if(message) await message.edit({...payload,attachments:[]});
     else message=await i.channel.send(payload);
-    store.setTicketPanel(i.guildId,i.channelId,message.id,support?.id || old?.support || null,parent?.id || old?.parent || null);
-    await i.editReply({content:`Het La Noche-ticketpaneel staat klaar.\n${message.url}\nBehandeling: ${support ? `<@&${support.id}>` : old?.support ? `<@&${old.support}>` : 'alleen beheerders'}.`});
+    store.setTicketPanel(i.guildId,i.channelId,message.id,null,null);
+    await i.editReply({content:`Het La Noche-ticketpaneel staat klaar.\n${message.url}\nElke ticketsoort gebruikt de eigen categorie en behandelrol. Beheerders hebben toegang tot alle tickets.`});
   });
 }
 async function openTicket(i,store) {
@@ -67,6 +64,8 @@ async function openTicket(i,store) {
     if (!panel || panel.message!==i.message.id) throw new UserError('Dit paneel is niet meer actief. Gebruik het nieuwste ticketpaneel.');
     const kind=i.values?.[0];
     if (!ticketTypes.some(t=>t[0]===kind)) throw new UserError('Onbekende ticketcategorie.');
+    const route=settings.tickets[kind];
+    if (!route) throw new UserError('Deze ticketsoort is nog niet ingesteld.');
     const previous=store.openTicket(i.guildId,i.user.id);
     if(previous) {
       let channel;
@@ -76,14 +75,15 @@ async function openTicket(i,store) {
     }
     const me=await i.guild.members.fetchMe();
     if(!me.permissions.has(P.ManageChannels)) throw new UserError('Ik mis de toestemming Kanalen beheren.');
-    if(panel.support && !await i.guild.roles.fetch(panel.support)) throw new UserError('De behandelrol bestaat niet meer. Laat een beheerder het paneel bijwerken.');
-    if(panel.parent && (await i.guild.channels.fetch(panel.parent))?.type!==ChannelType.GuildCategory) throw new UserError('De ingestelde categorie bestaat niet meer. Laat een beheerder het paneel bijwerken.');
+    const role=await i.guild.roles.fetch(route.support);
+    if(!role || role.id===i.guildId || role.managed) throw new UserError('De behandelrol ontbreekt of is ongeldig. Laat het beheer de ticketinstellingen controleren.');
+    if(route.parent && (await i.guild.channels.fetch(route.parent))?.type!==ChannelType.GuildCategory) throw new UserError('De ingestelde ticketcategorie ontbreekt of is ongeldig. Laat het beheer de ticketinstellingen controleren.');
     const allow=[P.ViewChannel,P.SendMessages,P.ReadMessageHistory,P.AttachFiles,P.EmbedLinks];
     const overwrites=[{id:i.guildId,deny:[P.ViewChannel]}, {id:me.id,allow:[...allow,P.ManageChannels,P.ManageMessages]}, {id:i.user.id,allow}];
-    if(panel.support) overwrites.push({id:panel.support,allow});
+    if(route.support) overwrites.push({id:route.support,allow});
     const name=i.user.username.toLowerCase().replace(/[^a-z0-9-]/g,'').slice(0,30)||'lid';
-    const channel=await i.guild.channels.create({name:`${kind}-${name}`,type:ChannelType.GuildText,parent:panel.parent||undefined,permissionOverwrites:overwrites,topic:`La Noche | ${kind} | ${i.user.id}`,reason:`Ticket geopend door ${i.user.id}`});
-    const ticket={guild:i.guildId,channel:channel.id,user:i.user.id,kind,support:panel.support,claimed:null,closed:0,message:null};
+    const channel=await i.guild.channels.create({name:`${kind}-${name}`,type:ChannelType.GuildText,parent:route.parent||undefined,permissionOverwrites:overwrites,topic:`La Noche | ${kind} | ${i.user.id}`,reason:`Ticket geopend door ${i.user.id}`});
+    const ticket={guild:i.guildId,channel:channel.id,user:i.user.id,kind,support:route.support,claimed:null,closed:0,message:null};
     try {
       const message=await channel.send(ticketPayload(ticket));
       ticket.message=message.id;

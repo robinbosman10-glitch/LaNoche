@@ -1,4 +1,10 @@
 export const settings = {
+  tickets: {
+    sollicitaties: { parent: '1557638802934337616', support: '1328812727287677061' },
+    'drugs-inkoop': { parent: '1557639006991155271', support: '1311585567921934367' },
+    'drugs-verkoop': { parent: '1557639006991155271', support: '1311585567921934367' },
+    witwas: { parent: '1557639163807932516', support: '1384749084694286356' },
+  },
   channels: {
     sollistatus: '1553516146773463162',
     ledenlijst: '1553516111176138852',
