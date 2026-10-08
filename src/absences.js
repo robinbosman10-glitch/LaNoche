@@ -1,8 +1,10 @@
+import { getMembers } from './member-cache.js';
 import {randomUUID} from 'node:crypto';
 import {ActionRowBuilder,ButtonBuilder,ButtonStyle,MessageFlags,PermissionFlagsBits as P,escapeMarkdown} from 'discord.js';
 import {branded,field} from './embeds.js';
 import {settings} from './settings.js';
 import {absenceDates,UserError} from './logic.js';
+export const absenceResetVersion='2026-10-08-reset-1';
 const locks=new Set();
 async function locked(guild,user,fn) {
   const key=`${guild}:${user}`;
@@ -15,7 +17,7 @@ export function absencePayload(r) {
   const [status,color]=statuses[r.status];
   const fields=[field('Lid',`<@${r.user}>`),field('Status',status),field('Vanaf',date(r.start)),field('Tot en met',date(r.end)),field('Reden',escapeMarkdown(r.reason),false)];
   if(r.reviewer) fields.push(field('Beoordeeld door',`<@${r.reviewer}>`,false));
-  const payload=branded('☾ AFWEZIGHEID • LA NOCHE','**Even afwezig. Nog steeds familie.**\n'+(r.status==='pending'?'Je aanvraag ligt bij de leiding. Na goedkeuring ontvang je automatisch de afwezigheidsrol.':r.status==='approved'?'Je afwezigheid is goedgekeurd. Je rol vervalt automatisch na de einddatum.':r.status==='denied'?'Deze aanvraag is afgekeurd. Er is geen afwezigheidsrol toegekend.':r.status==='expired'?'De periode is verstreken. Deze aanvraag is niet meer actief.':'De aanvraag wordt verwerkt.'),fields,'ticket-banner.gif','ticket-logo.gif');
+  const payload=branded('☾ AFWEZIGHEID • LA NOCHE','**Even afwezig. Nog steeds familie.**\n'+(r.status==='pending'?'Je aanvraag ligt bij de leiding. Na goedkeuring ontvang je automatisch de afwezigheidsrol.':r.status==='approved'?'Je afwezigheid is goedgekeurd. Je rol vervalt automatisch na de einddatum.':r.status==='denied'?'Deze aanvraag is afgekeurd. Er is geen afwezigheidsrol toegekend.':r.status==='expired'?'De periode is verstreken. Deze aanvraag is niet meer actief.':r.status==='cancelled'?'Deze afwezigheid is gereset. Je kunt een nieuwe aanvraag indienen.':'De aanvraag wordt verwerkt.'),fields,'ticket-banner.gif','ticket-logo.gif');
   payload.embeds[0].setColor(color).setFooter({text:'LA NOCHE • Einddatum telt volledig mee • Nederlandse tijd'});
   payload.components=[new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`ln-absence:approve:${r.id}`).setLabel('Goedgekeuren').setEmoji('✅').setStyle(ButtonStyle.Success).setDisabled(r.status!=='pending'),
@@ -24,6 +26,7 @@ export function absencePayload(r) {
 }
 export async function submitAbsenceRequest(i,store) {
   return locked(i.guildId,i.user.id,async()=>{
+    if(store.absenceResetState(i.guildId,absenceResetVersion)==='pending') throw new UserError('De afwezigheden worden gereset. Probeer het zo opnieuw.');
     const dates=absenceDates(i.fields.getTextInputValue('begin').trim(),i.fields.getTextInputValue('eind').trim());
     if(store.activeAbsenceRequest(i.guildId,i.user.id) || store.absent(i.guildId,i.user.id)?.end>=Date.now()) throw new UserError('Je hebt al een openstaande of goedgekeurde afwezigheid.');
     const channel=await i.guild.channels.fetch(settings.channels.afwezig);
@@ -115,4 +118,19 @@ export async function refreshAbsences(guild,store,now=Date.now()) {
     }catch{result.failed++;}
   }
   return result;
+}
+
+export async function resetAbsencesOnce(guild,store) {
+  store.beginAbsenceReset(guild.id,absenceResetVersion);
+  if(store.absenceResetState(guild.id,absenceResetVersion)==='done')return {done:true,removed:0};
+  const members=await getMembers(guild);
+  let removed=0,failed=0;
+  for(const member of members.values()) {
+    if(!member.roles.cache.has(settings.absenceRole))continue;
+    try {await member.roles.remove(settings.absenceRole,'Eenmalige reset van alle afwezigheden op verzoek van beheer');removed++;}
+    catch(error){if(error.code!==10007)failed++;}
+  }
+  if(failed)throw new UserError(`Afwezigheidsreset: rol verwijderen mislukt bij ${failed} leden; wordt opnieuw geprobeerd.`);
+  store.completeAbsenceReset(guild.id,absenceResetVersion);
+  return {done:true,removed};
 }

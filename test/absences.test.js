@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import {PermissionsBitField,PermissionFlagsBits as P} from 'discord.js';
 import {createStore} from '../src/store.js';
 import {settings} from '../src/settings.js';
-import {absencePayload,submitAbsenceRequest,handleAbsenceInteraction,refreshAbsences} from '../src/absences.js';
+import {absencePayload,submitAbsenceRequest,handleAbsenceInteraction,refreshAbsences,resetAbsencesOnce,absenceResetVersion} from '../src/absences.js';
 function setup(t) {
  const dir=mkdtempSync(join(tmpdir(),'ln-absence-'));const store=createStore(dir);t.after(()=>{store.close();rmSync(dir,{recursive:true,force:true});});
  const changes=[],sends=[];let adds=0,removes=0;let failRemove=false,failAdd=false;
@@ -63,4 +63,21 @@ test('failed grant leaves request pending and repeat review can succeed',async t
  await assert.rejects(handleAbsenceInteraction(s.interaction(),'g',s.store),/Discord error/);
  assert.equal(s.store.absenceRequest('request').status,'pending');assert.equal(s.store.absent('g','u'),undefined);
  s.failAdd(false);await handleAbsenceInteraction(s.interaction(),'g',s.store);assert.equal(s.adds(),1);
+});
+
+test('one-time reset clears legacy and pending records, removes role and preserves future requests',async t=>{
+ const s=setup(t);s.addRequest();s.store.setAbsent('g','u',s.r.start,s.r.end);s.member.roles.cache.set(settings.absenceRole,{});
+ const all=new Map([['u',s.member]]);s.guild.members.cache=all;s.guild.members.fetch=async()=>all;
+ await resetAbsencesOnce(s.guild,s.store);
+ assert.equal(s.store.absent('g','u'),undefined);assert.equal(s.store.activeAbsenceRequest('g','u'),undefined);assert.equal(s.store.absenceRequest('request').status,'cancelled');assert.equal(s.removes(),1);
+ s.store.createAbsenceRequest({...s.r,id:'new'});s.store.setAbsent('g','u',s.r.start,s.r.end);s.member.roles.cache.set(settings.absenceRole,{});
+ await resetAbsencesOnce(s.guild,s.store);
+ assert.equal(s.store.activeAbsenceRequest('g','u').id,'new');assert.ok(s.store.absent('g','u'));assert.equal(s.removes(),1);
+});
+test('failed reset retries role removal and blocks new absence submission until complete',async t=>{
+ const s=setup(t);s.member.roles.cache.set(settings.absenceRole,{});const all=new Map([['u',s.member]]);s.guild.members.cache=all;s.guild.members.fetch=async()=>all;s.failRemove(true);
+ await assert.rejects(resetAbsencesOnce(s.guild,s.store),/opnieuw geprobeerd/);
+ assert.equal(s.store.absenceResetState('g',absenceResetVersion),'pending');
+ const i=s.interaction();i.user.id='u';await assert.rejects(submitAbsenceRequest(i,s.store),/gereset/);
+ s.failRemove(false);await resetAbsencesOnce(s.guild,s.store);assert.equal(s.store.absenceResetState('g',absenceResetVersion),'done');assert.equal(s.removes(),1);
 });

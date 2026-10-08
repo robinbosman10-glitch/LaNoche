@@ -1,4 +1,4 @@
-import { handleAbsenceInteraction, refreshAbsences } from './absences.js';
+import { handleAbsenceInteraction, refreshAbsences, resetAbsencesOnce, absenceResetVersion } from './absences.js';
 import { syncApplicationLinks } from './applications.js';
 import { handleTicketInteraction, handleTicketMessage, syncTicketAccess } from './tickets.js';
 import { invalidateMembers } from './member-cache.js';
@@ -41,11 +41,12 @@ client.once(Events.ClientReady, async current => {
     const guild = await current.guilds.fetch(config.guildId);
     // Own dedicated application: synchronizes exactly the 10 commands in this guild.
     await guild.commands.set(commands);
+    store.beginAbsenceReset(guild.id,absenceResetVersion);
     ready = true;
     const refreshAbsenceRoles=async()=>{
       if(absenceRefreshing)return;
       absenceRefreshing=true;
-      try {const result=await refreshAbsences(guild,store);if(result.failed)console.error(`Afwezigheid bijwerken mislukt voor ${result.failed} aanvragen; wordt opnieuw geprobeerd.`);}
+      try {const reset=await resetAbsencesOnce(guild,store);if(reset.removed)console.log(`Afwezigheidsreset: ${reset.removed} rollen verwijderd.`);const result=await refreshAbsences(guild,store);if(result.failed)console.error(`Afwezigheid bijwerken mislukt voor ${result.failed} aanvragen; wordt opnieuw geprobeerd.`);}
       catch(error){logError('Afwezigheid bijwerken mislukt',error);}
       finally{absenceRefreshing=false;}
     };

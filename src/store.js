@@ -27,6 +27,19 @@ export function createStore(directory) {
     absent(guild,user) { return db.prepare('SELECT start,end FROM absences WHERE guild=? AND user=?').get(guild,user); },
     setAbsent(guild,user,start,end) { db.prepare('INSERT INTO absences VALUES (?,?,?,?) ON CONFLICT(guild,user) DO UPDATE SET start=excluded.start,end=excluded.end').run(guild,user,start,end); },
     clearAbsent(guild,user) { db.prepare('DELETE FROM absences WHERE guild=? AND user=?').run(guild,user); },
+    beginAbsenceReset(guild,version) {
+      const key=`absenceReset:${guild}:${version}`;
+      if(db.prepare('SELECT value FROM meta WHERE key=?').get(key)) return;
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        db.prepare('DELETE FROM absences WHERE guild=?').run(guild);
+        db.prepare("UPDATE absence_requests SET status='cancelled',dirty=1 WHERE guild=? AND status IN ('pending','approving','approved')").run(guild);
+        db.prepare('INSERT INTO meta VALUES (?,?)').run(key,'pending');
+        db.exec('COMMIT');
+      } catch(error) {db.exec('ROLLBACK');throw error;}
+    },
+    absenceResetState(guild,version) {return db.prepare('SELECT value FROM meta WHERE key=?').get(`absenceReset:${guild}:${version}`)?.value;},
+    completeAbsenceReset(guild,version) {db.prepare('UPDATE meta SET value=? WHERE key=?').run('done',`absenceReset:${guild}:${version}`);},
     absenceRequest(id) { return db.prepare('SELECT * FROM absence_requests WHERE id=?').get(id); },
     absenceRequests(guild) { return db.prepare("SELECT * FROM absence_requests WHERE guild=? AND (status IN ('pending','approving','approved') OR dirty=1)").all(guild); },
     activeAbsenceRequest(guild,user) { return db.prepare("SELECT * FROM absence_requests WHERE guild=? AND user=? AND status IN ('pending','approving','approved')").get(guild,user); },
