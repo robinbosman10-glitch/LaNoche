@@ -1,3 +1,4 @@
+import {syncRadio} from './radio.js';
 import {syncOutfit} from './outfit.js';
 import {createTranscriptServer,transcriptBase} from './transcript-web.js';
 import { flushAudit, handleTranscript, upgradeTicketLogs } from './audit.js';
@@ -64,6 +65,7 @@ client.once(Events.ClientReady, async current => {
     void refreshAbsenceRoles();
     absenceTimer=setInterval(refreshAbsenceRoles,30000);
     absenceTimer.unref();
+    syncRadio(guild,store).catch(error=>logError('Porto-embed plaatsen mislukt',error));
     syncOutfit(guild,store).catch(error=>logError('Gangoutfit plaatsen mislukt',error));
     syncApplicationLinks(guild,store).then(result=>{
       console.log(`Sollicitatieknoppen bijgewerkt: ${result.updated}; mislukt: ${result.failed}.`);
