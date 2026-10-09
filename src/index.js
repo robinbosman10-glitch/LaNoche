@@ -1,3 +1,4 @@
+import {syncGangInformation} from './gang-informatie.js';
 import {syncRadio} from './radio.js';
 import {syncOutfit} from './outfit.js';
 import {createTranscriptServer,transcriptBase} from './transcript-web.js';
@@ -65,6 +66,7 @@ client.once(Events.ClientReady, async current => {
     void refreshAbsenceRoles();
     absenceTimer=setInterval(refreshAbsenceRoles,30000);
     absenceTimer.unref();
+    syncGangInformation(guild,store).catch(error=>logError('Ganginformatie plaatsen mislukt',error));
     syncRadio(guild,store).catch(error=>logError('Porto-embed plaatsen mislukt',error));
     syncOutfit(guild,store).catch(error=>logError('Gangoutfit plaatsen mislukt',error));
     syncApplicationLinks(guild,store).then(result=>{
