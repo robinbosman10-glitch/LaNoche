@@ -1,11 +1,14 @@
-import {AttachmentBuilder,EmbedBuilder} from 'discord.js';
-import {fileURLToPath} from 'node:url';
+import {branded,field} from './embeds.js';
 export const outfitChannel='1557782249804529685';
 const title='🧥 GANG OUTFIT';
 export function outfitPayload(){
- // Use the approved artwork itself: Discord's light theme cannot recolor it.
- const file=new AttachmentBuilder(fileURLToPath(new URL('../assets/gang-outfit.png',import.meta.url)),{name:'gang-outfit.png',description:'La Noche gangoutfit: jas 1111, variant 4, shirt 146. Broek en schoenen naar keuze, volledig zwart.'});
- return {content:'',embeds:[new EmbedBuilder().setColor(0xff7900).setImage('attachment://gang-outfit.png')],files:[file],allowedMentions:{parse:[]}};
+ const payload=branded(title,'**Eén familie. Eén uitstraling.**\n\nDit is de officiële outfit van La Noche. Hieronder vind je alle kledingnummers.',[
+  field('🧥 JAS','**1111**'),field('🎨 VARIANT','**4**'),field('👕 SHIRT','**146**'),
+  field('👖 BROEK & SCHOENEN','**Broek:** eigen keuze, volledig zwart.\n**Schoenen:** eigen keuze, volledig zwart.',false)
+ ],'ticket-banner.gif','ticket-logo.gif');
+ payload.content='';
+ payload.embeds[0].setFooter({text:'LA NOCHE • Gangoutfit'});
+ return payload;
 }
 const busy=new Set();
 export async function syncOutfit(guild,store){
