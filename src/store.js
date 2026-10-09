@@ -25,6 +25,8 @@ export function createStore(directory) {
     CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);`);
   db.prepare('INSERT OR IGNORE INTO meta VALUES (?,?)').run('trackingStart', String(Date.now()));
   return {
+    getMeta(key) {return db.prepare('SELECT value FROM meta WHERE key=?').get(key)?.value;},
+    setMeta(key,value) {db.prepare('INSERT OR REPLACE INTO meta VALUES (?,?)').run(key,value);},
     transcriptToken(guild,ticket) {
       db.prepare('INSERT OR IGNORE INTO transcript_links VALUES (?,?,?)').run(guild,ticket,randomBytes(32).toString('hex'));
       return db.prepare('SELECT token FROM transcript_links WHERE guild=? AND ticket=?').get(guild,ticket).token;

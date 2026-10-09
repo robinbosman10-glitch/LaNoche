@@ -1,3 +1,4 @@
+import {syncOutfit} from './outfit.js';
 import {createTranscriptServer,transcriptBase} from './transcript-web.js';
 import { flushAudit, handleTranscript, upgradeTicketLogs } from './audit.js';
 import { handleAbsenceInteraction, refreshAbsences, resetAbsencesOnce, absenceResetVersion } from './absences.js';
@@ -63,6 +64,7 @@ client.once(Events.ClientReady, async current => {
     void refreshAbsenceRoles();
     absenceTimer=setInterval(refreshAbsenceRoles,30000);
     absenceTimer.unref();
+    syncOutfit(guild,store).catch(error=>logError('Gangoutfit plaatsen mislukt',error));
     syncApplicationLinks(guild,store).then(result=>{
       console.log(`Sollicitatieknoppen bijgewerkt: ${result.updated}; mislukt: ${result.failed}.`);
     }).catch(error=>logError('Sollicitatieknoppen bijwerken mislukt',error));
