@@ -1,3 +1,4 @@
+import {syncRules} from './regels.js';
 import {syncGangInformation} from './gang-informatie.js';
 import {syncRadio} from './radio.js';
 import {syncOutfit} from './outfit.js';
@@ -66,6 +67,7 @@ client.once(Events.ClientReady, async current => {
     void refreshAbsenceRoles();
     absenceTimer=setInterval(refreshAbsenceRoles,30000);
     absenceTimer.unref();
+    syncRules(guild,store).catch(error=>logError('Regels plaatsen mislukt',error));
     syncGangInformation(guild,store).catch(error=>logError('Ganginformatie plaatsen mislukt',error));
     syncRadio(guild,store).catch(error=>logError('Porto-embed plaatsen mislukt',error));
     syncOutfit(guild,store).catch(error=>logError('Gangoutfit plaatsen mislukt',error));
