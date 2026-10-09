@@ -5,20 +5,20 @@ const title='📜 LA NOCHE • REGELS';
 export function rulesPayload(){
  const payload=branded(title,'Samen houden we La Noche respectvol, veilig en overzichtelijk. Lees de onderstaande regels goed door.',[
   field('🤝 DISCORD REGELS',[
-   '**Respecteer elkaar.** Behandel alle leden met respect en vriendelijkheid. Geen beledigingen, discriminatie, pesten of ongewenst gedrag.',
-   '**Geen schadelijke inhoud.** Plaats geen virussen, malware of schadelijke links.',
-   '**Geen spam.** Vermijd spammen, overmatige hoofdletters of herhaaldelijk dezelfde berichten sturen.',
-   '**Geen NSFW-inhoud.** Geen expliciete of ongepaste inhoud, zoals naaktheid, seksuele inhoud of gewelddadige afbeeldingen.',
-   '**Geen reclame zonder toestemming.** Geen zelfpromotie of reclame zonder toestemming van de beheerders.'
+   '**🤝Respecteer elkaar.** Behandel alle leden met respect en vriendelijkheid. Geen beledigingen, discriminatie, pesten of ongewenst gedrag.',
+   '**🛡️Geen schadelijke inhoud.** Plaats geen virussen, malware of schadelijke links.',
+   '**🚫Geen spam.** Vermijd spammen, overmatige hoofdletters of herhaaldelijk dezelfde berichten sturen.',
+   '**🔞Geen NSFW-inhoud.** Geen expliciete of ongepaste inhoud, zoals naaktheid, seksuele inhoud of gewelddadige afbeeldingen.',
+   '**📢Geen reclame zonder toestemming.** Geen zelfpromotie of reclame zonder toestemming van de beheerders.'
   ].join('\n\n'),false),
   field('📌 KANAALSPECIFIEKE REGELS',[
-   '**Houd het relevant.** Gebruik de juiste kanalen voor de bijpassende gesprekken en onderwerpen.',
-   '**Geen dubbele posts.** Plaats niet dezelfde boodschap in meerdere kanalen.'
+   '**🎯Houd het relevant.** Gebruik de juiste kanalen voor de bijpassende gesprekken en onderwerpen.',
+   '**📌Geen dubbele posts.** Plaats niet dezelfde boodschap in meerdere kanalen.'
   ].join('\n\n'),false),
   field('🎙️ VOICE CHAT REGELS',[
-   '**Niet onderbreken.** Val anderen niet in de rede en wacht op je beurt om te spreken.',
-   '**Geen storende achtergrondgeluiden.** Zorg voor een rustige omgeving zonder afleidende geluiden.',
-   '**Geen stemvervorming zonder toestemming.** Gebruik geen voice changers zonder akkoord van de andere deelnemers.'
+   '**🙊Niet onderbreken.** Val anderen niet in de rede en wacht op je beurt om te spreken.',
+   '**🔇Geen storende achtergrondgeluiden.** Zorg voor een rustige omgeving zonder afleidende geluiden.',
+   '**🎭Geen stemvervorming zonder toestemming.** Gebruik geen voice changers zonder akkoord van de andere deelnemers.'
   ].join('\n\n'),false)
  ],'ticket-banner.gif','ticket-logo.gif');
  payload.content='';
