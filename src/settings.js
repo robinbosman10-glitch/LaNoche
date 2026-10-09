@@ -12,7 +12,7 @@ export const settings = {
     ticketLogs: '1420469739725000744',
     absenceLogs: '1557653747654729748',
     sollistatus: '1553516146773463162',
-    ledenlijst: '1553516111176138852',
+    ledenlijst: '1557999909230354442',
     aangenomen: '1557288102286987274',
     afwezig: '1553517123844706435',
     ontslaan: '1553516886199771216',
