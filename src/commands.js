@@ -23,5 +23,6 @@ export const commands = definitions.map(command => {
     builder.addUserOption(option => option.setName('persoon').setDescription('Het ganglid').setRequired(true));
     builder.addStringOption(option => option.setName('reden').setDescription('Toelichting bij deze wijziging').setMaxLength(700));
   }
+  if (command.name === 'promotie') builder.addRoleOption(option => option.setName('rang').setDescription('Gewenste hogere gangrang; leeg laten voor één rang omhoog').setRequired(false));
   return builder.toJSON();
 });

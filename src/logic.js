@@ -13,10 +13,15 @@ export function absenceDates(startText, endText, now = Date.now()) {
   if (end < start) throw new UserError('De einddatum mag niet vóór de begindatum liggen.');
   return { start: start.toMillis(), end: end.toMillis() };
 }
-export function nextRank(ranks, currentIds, direction) {
+export function nextRank(ranks, currentIds, direction, targetId = null) {
   if (ranks.length < 2) throw new UserError('De rangvolgorde moet nog worden ingesteld. Stuur de gangrangen van laag naar hoog.');
   const held = ranks.filter(id => currentIds.includes(id));
   if (held.length !== 1) throw new UserError('Dit lid moet precies één ingestelde gangrang hebben.');
+  if (targetId) {
+    if (!ranks.includes(targetId)) throw new UserError('Kies een ingestelde gangrang.');
+    if (ranks.indexOf(targetId) <= ranks.indexOf(held[0])) throw new UserError('Kies een hogere gangrang dan de huidige rang.');
+    return {from:held[0],to:targetId};
+  }
   const next = ranks[ranks.indexOf(held[0]) + direction];
   if (!next) throw new UserError(direction > 0 ? 'Dit lid heeft al de hoogste gangrang.' : 'Dit lid heeft al de laagste gangrang.');
   return { from: held[0], to: next };

@@ -61,7 +61,7 @@ function mockAction(command, held) {
   const actor={roles:{highest:{comparePositionTo:()=>1}}};
   const channel={id:'channel',isTextBased:()=>true,isThread:()=>false,permissionsFor:()=>({has:()=>true}),send:async p=>{sent.push(p);return {url:'https://discord.com/test'};}};
   const cache=new Collection([...new Set([...held,...settings.joinRoles,...settings.ranks,settings.keepRole])].map(id=>[id,{id,editable:true}]));
-  const i={commandName:command,guildId:'guild',channelId:'channel',user:{id:'actor'},isChatInputCommand:()=>true,inGuild:()=>true,memberPermissions:new PermissionsBitField(PermissionFlagsBits.Administrator),options:{getUser:()=>({id:'target',bot:false}),getString:()=>null},deferReply:async()=>{},editReply:async payload=>payload,
+  const i={commandName:command,guildId:'guild',channelId:'channel',user:{id:'actor'},isChatInputCommand:()=>true,inGuild:()=>true,memberPermissions:new PermissionsBitField(PermissionFlagsBits.Administrator),options:{getUser:()=>({id:'target',bot:false}),getString:()=>null,getRole:()=>null},deferReply:async()=>{},editReply:async payload=>payload,
     guild:{id:'guild',ownerId:'owner',channels:{fetch:async()=>channel},roles:{cache,fetch:async()=>{}},members:{me:{permissions:{has:()=>true}},fetch:async({user})=>user==='target'?member:actor}}};
   return {i,changes,sent};
 }
@@ -94,4 +94,30 @@ test('live refresh coalesces bursts and retains changes arriving during refresh'
     live.schedule();release();
     await new Promise(r=>setTimeout(r,20));assert.equal(calls,2);
   } finally {live.stop();}
+});
+
+test('selected promotion skips ranks, preserves other roles and reports destination',async()=>{
+ const {i,changes,sent}=mockAction('promotie',[settings.ranks[0],'unrelated']);
+ i.options.getRole=()=>i.guild.roles.cache.get(settings.ranks[3]);
+ let result;i.editReply=async payload=>{result=payload;return payload;};
+ await handleInteraction(i,'guild',{});
+ assert.deepEqual(changes,[['set',['unrelated',settings.ranks[3]]]]);
+ assert.match(result.content,new RegExp(settings.ranks[3]));
+ assert.equal(sent[0].embeds[0].toJSON().fields.at(-1).value,`<@&${settings.ranks[3]}>`);
+});
+test('selected promotion rejects unrelated, equal, lower and uneditable roles without mutation',async()=>{
+ for(const target of ['unrelated',settings.ranks[1],settings.ranks[0],settings.ranks[3]]){
+  const {i,changes}=mockAction('promotie',[settings.ranks[1],'unrelated']);
+  if(target===settings.ranks[3])i.guild.roles.cache.get(target).editable=false;
+  i.options.getRole=()=>i.guild.roles.cache.get(target);
+  await handleInteraction(i,'guild',{});
+  assert.equal(changes.length,0);
+ }
+});
+test('selected promotion cannot grant a role at actor height',async()=>{
+ const {i,changes}=mockAction('promotie',[settings.ranks[0]]);
+ i.options.getRole=()=>i.guild.roles.cache.get(settings.ranks[3]);
+ const fetch=i.guild.members.fetch;
+ i.guild.members.fetch=async args=>args.user==='actor'?{roles:{highest:{comparePositionTo:()=>0}}}:fetch(args);
+ await handleInteraction(i,'guild',{});assert.equal(changes.length,0);
 });

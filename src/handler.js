@@ -78,13 +78,18 @@ async function roleAction(i, store) {
       const extra = managed.length ? '\nAutomatisch beheerde Discord-rollen blijven ook behouden.' : '';
       return announceAfterChange(i, channel, branded('◈ DIENSTVERBAND BEËINDIGD', `<@${member.id}> maakt geen deel meer uit van **La Noche**.\nDe bijbehorende rollen zijn ingetrokken.`, [...common, field('Rollen', `Alle verwijderbare rollen ingetrokken. De uitzonderingsrol wordt behouden als het lid deze had.${extra}`, false)]), `Het lid is ontslagen; ${remove.length} rollen verwijderd.${extra}`);
     }
-    const change = nextRank(settings.ranks, [...member.roles.cache.keys()], name === 'promotie' ? 1 : -1);
+    const selectedRank = name === 'promotie' ? i.options.getRole('rang') : null;
+    const change = nextRank(settings.ranks, [...member.roles.cache.keys()], name === 'promotie' ? 1 : -1, selectedRank?.id);
+    if (selectedRank && i.user.id !== i.guild.ownerId) {
+      const actor = await i.guild.members.fetch({user:i.user.id, force:true});
+      if (actor.roles.highest.comparePositionTo(selectedRank) <= 0) throw new UserError('Je kunt alleen promoveren naar een rang onder jouw hoogste rol.');
+    }
     await editableRoles(i.guild, [change.from, change.to]);
     // One request replaces the rank while retaining unrelated roles.
     const roles = [...member.roles.cache.keys()].filter(id=>id!==i.guildId && id!==change.from);
     await member.roles.set([...new Set([...roles, change.to])], audit);
     const promoted = name === 'promotie';
-    return announceAfterChange(i, channel, branded(promoted ? '✦ EEN NIEUWE RANG. EEN NIEUW HOOFDSTUK.' : '◈ RANGWIJZIGING', promoted ? `<@${member.id}> is **gepromoveerd**.\nInzet wordt gezien. Loyaliteit wordt beloond. Gefeliciteerd namens La Noche.` : `<@${member.id}> is één rang teruggezet.`, [...common, field('Vorige rang', `<@&${change.from}>`), field('Nieuwe rang', `<@&${change.to}>`)]), `Het lid is één rang ${promoted ? 'omhoog' : 'omlaag'} gezet.`);
+    return announceAfterChange(i, channel, branded(promoted ? '✦ EEN NIEUWE RANG. EEN NIEUW HOOFDSTUK.' : '◈ RANGWIJZIGING', promoted ? `<@${member.id}> is **gepromoveerd**.\nInzet wordt gezien. Loyaliteit wordt beloond. Gefeliciteerd namens La Noche.` : `<@${member.id}> is één rang teruggezet.`, [...common, field('Vorige rang', `<@&${change.from}>`), field('Nieuwe rang', `<@&${change.to}>`)]), selectedRank ? `Het lid is gepromoveerd naar <@&${change.to}>.` : `Het lid is één rang ${promoted ? 'omhoog' : 'omlaag'} gezet.`);
   });
 }
 function absenceModal() {
