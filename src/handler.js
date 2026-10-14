@@ -25,13 +25,13 @@ async function channelFor(guild, id) {
   }
   return channel;
 }
-async function targetFor(i) {
+async function targetFor(i, needsRoles = true) {
   const user = i.options.getUser('persoon', true);
   const member = await i.guild.members.fetch({user:user.id, force:true});
   const actor = await i.guild.members.fetch({user:i.user.id, force:true});
   if (user.bot) throw new UserError('Kies een lid, geen bot.');
   if (user.id === i.user.id) throw new UserError('Je kunt deze rolwijziging niet op jezelf uitvoeren.');
-  if (!member.manageable || !i.guild.members.me.permissions.has(PermissionFlagsBits.ManageRoles)) throw new UserError('Ik kan de rollen van dit lid niet beheren. Controleer Beheer rollen en de botrolpositie.');
+  if (needsRoles && (!member.manageable || !i.guild.members.me.permissions.has(PermissionFlagsBits.ManageRoles))) throw new UserError('Ik kan de rollen van dit lid niet beheren. Controleer Beheer rollen en de botrolpositie.');
   if (i.user.id !== i.guild.ownerId && actor.roles.highest.comparePositionTo(member.roles.highest) <= 0) throw new UserError('Je kunt alleen leden onder jouw hoogste rol aanpassen.');
   return member;
 }
@@ -92,6 +92,33 @@ async function roleAction(i, store) {
     return announceAfterChange(i, channel, branded(promoted ? '✦ EEN NIEUWE RANG. EEN NIEUW HOOFDSTUK.' : '◈ RANGWIJZIGING', promoted ? `<@${member.id}> is **gepromoveerd**.\nInzet wordt gezien. Loyaliteit wordt beloond. Gefeliciteerd namens La Noche.` : `<@${member.id}> is één rang teruggezet.`, [...common, field('Vorige rang', `<@&${change.from}>`), field('Nieuwe rang', `<@&${change.to}>`)]), selectedRank ? `Het lid is gepromoveerd naar <@&${change.to}>.` : `Het lid is één rang ${promoted ? 'omhoog' : 'omlaag'} gezet.`);
   });
 }
+async function warnAction(i) {
+  const user=i.options.getUser('persoon',true);
+  return withLock(`${i.guildId}:member:${user.id}`,async()=>{
+    const selected=i.options.getRole('rol');
+    const member=await targetFor(i,Boolean(selected));
+    const reason=i.options.getString('reden',true).trim();
+    if(!reason)throw new UserError('Vul een reden voor de waarschuwing in.');
+    const channel=await channelFor(i.guild,i.channelId);
+    if(selected){
+      if(settings.ranks.includes(selected.id))throw new UserError('Kies een waarschuwingsrol, geen gangrang.');
+      await editableRoles(i.guild,[selected.id]);
+      const role=i.guild.roles.cache.get(selected.id);
+      const actor=await i.guild.members.fetch({user:i.user.id,force:true});
+      if(i.user.id!==i.guild.ownerId && actor.roles.highest.comparePositionTo(role)<=0)throw new UserError('Je kunt alleen een waarschuwingsrol onder jouw hoogste rol toevoegen.');
+    }
+    const payload=branded('⚠️ OFFICIËLE WAARSCHUWING',`<@${member.id}> heeft een waarschuwing ontvangen.\nNeem deze waarschuwing serieus en voorkom herhaling.`,[
+      field('👤 LID',`<@${member.id}>`),field('🛡️ UITGEVOERD DOOR',`<@${i.user.id}>`),
+      field('📝 REDEN',escapeMarkdown(reason),false),field('🏷️ WAARSCHUWINGSROL',selected?`<@&${selected.id}>`:'Geen rol gekozen.',false)
+    ],'ticket-banner.gif','ticket-logo.gif');
+    if(selected && !member.roles.cache.has(selected.id)){
+      await member.roles.add(selected.id,`Waarschuwing door ${i.user.id}: ${reason}`.slice(0,500));
+      return announceAfterChange(i,channel,payload,'De waarschuwingsrol is toegevoegd.');
+    }
+    const message=await channel.send(payload);
+    return i.editReply({content:`De waarschuwing is geplaatst.\n${message.url}`,allowedMentions:{parse:[]}});
+  });
+}
 function absenceModal() {
   const modal = new ModalBuilder().setCustomId('lanoche:afwezig').setTitle('La Noche • Afwezig melden');
   for (const [id, label, style, max] of [['reden','Reden',TextInputStyle.Paragraph,700],['begin','Begindatum (DD-MM-YYYY)',TextInputStyle.Short,10],['eind','Einddatum (DD-MM-YYYY)',TextInputStyle.Short,10]]) {
@@ -150,6 +177,7 @@ export async function handleInteraction(i, guildId, store) {
   await i.deferReply({flags:MessageFlags.Ephemeral});
   try {
     if (modal) return await submitAbsenceRequest(i,store);
+    if (i.commandName==='warn') return await warnAction(i);
     if (['aangenomen','ontslaan','promotie','demote'].includes(i.commandName)) return await roleAction(i,store);
     if (i.commandName==='discordinactief') return await inactivity(i,store);
     if (i.commandName==='ledenlijst') { const url = await updateMemberlist(i.guild,store,i.channelId); return await i.editReply({content:`De ledenlijst is bijgewerkt.\n${url}`}); }

@@ -2,6 +2,7 @@ import { SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
 
 // Names and descriptions follow the supplied screenshots. Wiring comes later.
 export const definitions = [
+  ['warn', 'Geef een waarschuwing met optioneel een waarschuwingsrol', true, 'waarschuwing en optionele rol'],
   ['aangenomen', 'Neem iemand aan in de gang', true, 'proefrang, aanvullende rollen en het aangenomen-kanaal'],
   ['afwezig', 'Meld je afwezig (formaat: DD-MM-YYYY)', false, 'afwezigheidsformulier, opslag, goedkeuring en afwezigheidsrol'],
   ['demote', 'Degradeer iemand naar een nieuwe rol', true, 'gangrangen, bevoegdheden en het demotie-kanaal'],
@@ -24,5 +25,10 @@ export const commands = definitions.map(command => {
     builder.addStringOption(option => option.setName('reden').setDescription('Toelichting bij deze wijziging').setMaxLength(700));
   }
   if (command.name === 'promotie') builder.addRoleOption(option => option.setName('rang').setDescription('Gewenste hogere gangrang; leeg laten voor één rang omhoog').setRequired(false));
+  if (command.name === 'warn') {
+    builder.addUserOption(option => option.setName('persoon').setDescription('Het lid dat je waarschuwt').setRequired(true));
+    builder.addStringOption(option => option.setName('reden').setDescription('Reden van de waarschuwing').setRequired(true).setMaxLength(700));
+    builder.addRoleOption(option => option.setName('rol').setDescription('Optioneel: een waarschuwingsrol toevoegen'));
+  }
   return builder.toJSON();
 });

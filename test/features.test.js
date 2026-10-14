@@ -121,3 +121,29 @@ test('selected promotion cannot grant a role at actor height',async()=>{
  i.guild.members.fetch=async args=>args.user==='actor'?{roles:{highest:{comparePositionTo:()=>0}}}:fetch(args);
  await handleInteraction(i,'guild',{});assert.equal(changes.length,0);
 });
+
+test('warn without role posts animated embed without changing roles',async()=>{
+ const {i,changes,sent}=mockAction('warn',[settings.ranks[0],'unrelated']);
+ i.options.getString=()=>'<test> reden';
+ i.guild.members.me.permissions.has=()=>false;
+ await handleInteraction(i,'guild',{});
+ assert.deepEqual(changes,[]);assert.equal(sent.length,1);
+ const e=sent[0].embeds[0].toJSON();assert.equal(e.title,'⚠️ OFFICIËLE WAARSCHUWING');assert.equal(e.image.url,'attachment://ticket-banner.gif');assert.equal(e.thumbnail.url,'attachment://ticket-logo.gif');
+});
+test('warn adds only selected role and leaves current ranks untouched',async()=>{
+ const {i,changes,sent}=mockAction('warn',[settings.ranks[0],'unrelated']);
+ i.options.getString=()=> 'Porto verstoren';
+ i.guild.roles.cache.set('warning',{id:'warning',editable:true});
+ i.options.getRole=()=>i.guild.roles.cache.get('warning');
+ await handleInteraction(i,'guild',{});
+ assert.deepEqual(changes,[['add','warning']]);assert.equal(sent.length,1);
+});
+test('warn rejects gang ranks, uneditable roles and blank reasons',async()=>{
+ for(const kind of ['rank','uneditable','blank']){
+  const {i,changes,sent}=mockAction('warn',[settings.ranks[0]]);
+  i.options.getString=()=>kind==='blank'?'   ':'Test';
+  i.guild.roles.cache.set('warning',{id:'warning',editable:false});
+  i.options.getRole=()=>kind==='rank'?i.guild.roles.cache.get(settings.ranks[2]):kind==='uneditable'?i.guild.roles.cache.get('warning'):null;
+  await handleInteraction(i,'guild',{});assert.equal(changes.length,0);assert.equal(sent.length,0);
+ }
+});

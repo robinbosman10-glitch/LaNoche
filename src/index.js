@@ -50,7 +50,7 @@ function logError(label, error) {
 client.once(Events.ClientReady, async current => {
   try {
     const guild = await current.guilds.fetch(config.guildId);
-    // Own dedicated application: synchronizes exactly the 10 commands in this guild.
+    // Own dedicated application: synchronizes the configured commands in this guild.
     await guild.commands.set(commands);
     store.beginAbsenceReset(guild.id,absenceResetVersion);
     ready = true;
