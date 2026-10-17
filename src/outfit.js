@@ -3,7 +3,7 @@ export const outfitChannel='1557782249804529685';
 const title='🧥 GANG OUTFIT';
 export function outfitPayload(){
  const payload=branded(title,'**Eén familie. Eén uitstraling.**\n\nDit is de officiële outfit van La Noche. Hieronder vind je alle kledingnummers.',[
-  field('🧥 JAS','**1111**'),field('🎨 VARIANT','**4**'),field('👕 SHIRT','**146**'),
+  field('🧥 JAS','**1111**'),field('🎨 VARIANT','**1**'),field('👕 SHIRT','**146**'),
   field('👖 BROEK & SCHOENEN','**Broek:** eigen keuze, volledig zwart.\n**Schoenen:** eigen keuze, volledig zwart.',false)
  ],'ticket-banner.gif','ticket-logo.gif');
  payload.content='';
@@ -32,3 +32,4 @@ export async function syncOutfit(guild,store){
   store.setMeta(key,message.id);
  }finally{busy.delete(guild.id);}
 }
+
