@@ -11,7 +11,7 @@ export const settings = {
   channels: {
     ticketLogs: '1420469739725000744',
     absenceLogs: '1557653747654729748',
-    sollistatus: '1553516146773463162',
+    sollistatus: '1563680201798459474',
     ledenlijst: '1557999909230354442',
     aangenomen: '1557288102286987274',
     afwezig: '1553517123844706435',
