@@ -6,7 +6,7 @@ import { readConfig } from '../src/config.js';
 import { handleInteraction } from '../src/handler.js';
 
 test('all commands serialize with safe default permissions', () => {
-  assert.deepEqual(commands.map(c => c.name).sort(), ['aangenomen','afwezig','demote','discordinactief','ledenlijst','ontslaan','promotie','rolaanvraag','sollistatus','ticket-panel','warn'].sort());
+  assert.deepEqual(commands.map(c => c.name).sort(), ['aangenomen','afwezig','demote','discordinactief','ledenlijst','ontslaan','promotie','rolaanvraag','sollistatus','ticket-panel','warn','zeg'].sort());
   for (const command of commands) {
     assert.ok(command.description.length <= 100);
     if (!['afwezig','rolaanvraag'].includes(command.name)) assert.equal(command.default_member_permissions, '8');
@@ -32,4 +32,29 @@ test('afwezig opens a form and wrong guilds are rejected', async () => {
   assert.equal(result.components.length,3);
   assert.match((await handleInteraction(interaction('afwezig',false,null),guild)).content,/alleen beschikbaar/);
   assert.match((await handleInteraction(interaction('afwezig',true,'999999999999999999'),guild)).content,/alleen beschikbaar/);
+});
+
+test('zeg opens paragraph form without first deferring',async()=>{
+ const i=interaction('zeg',true);i.showModal=async m=>m.toJSON();
+ const form=await handleInteraction(i,guild);
+ assert.equal(form.custom_id,'lanoche:zeg');
+ assert.equal(form.components[0].components[0].style,2);
+ assert.equal(form.components[0].components[0].max_length,2000);
+});
+test('zeg submission preserves lists in current channel and rechecks authorization',async()=>{
+ const i=interaction('zeg',true);let sent;let deferred=false;
+ i.isChatInputCommand=()=>false;i.isModalSubmit=()=>true;i.customId='lanoche:zeg';
+ i.channelId='current';i.fields={getTextInputValue:()=>'- Eerste\n- Tweede @everyone'};
+ i.deferReply=async()=>{deferred=true;};i.editReply=async p=>p;
+ i.guild={members:{me:{}},channels:{fetch:async id=>{assert.equal(id,'current');return {
+ isThread:()=>false,permissionsFor:()=>new PermissionsBitField(PermissionFlagsBits.Administrator),
+ send:async p=>{sent=p;return {url:'message-link'};}};}}};
+ const result=await handleInteraction(i,guild);
+ assert.equal(deferred,true);assert.equal(sent.content,'- Eerste\n- Tweede @everyone');
+ assert.deepEqual(sent.allowedMentions,{parse:[]});assert.match(result.content,/geplaatst/);
+ sent=null;i.memberPermissions=new PermissionsBitField();
+ assert.match((await handleInteraction(i,guild)).content,/beheerdersrechten/);assert.equal(sent,null);
+ i.memberPermissions=new PermissionsBitField(PermissionFlagsBits.Administrator);
+ i.fields.getTextInputValue=()=> '   \n';
+ assert.match((await handleInteraction(i,guild)).content,/Vul tekst/);assert.equal(sent,null);
 });

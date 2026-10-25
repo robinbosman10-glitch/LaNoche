@@ -166,16 +166,33 @@ async function applications(i, store) {
   });
 }
 export async function handleInteraction(i, guildId, store) {
-  const modal = i.isModalSubmit?.() && i.customId === 'lanoche:afwezig';
+  const modal = i.isModalSubmit?.() && ['lanoche:afwezig','lanoche:zeg'].includes(i.customId);
+  const sayModal = modal && i.customId === 'lanoche:zeg';
   if (!i.isChatInputCommand() && !modal) return;
   const reply = content=>i.reply({content,flags:MessageFlags.Ephemeral,allowedMentions:{parse:[]}});
   if (!i.inGuild() || i.guildId!==guildId) return reply('Deze bot is alleen beschikbaar in de ingestelde La Noche-server.');
-  const definition = modal ? definitions.find(c=>c.name==='afwezig') : definitions.find(c=>c.name===i.commandName);
+  const definition = modal ? definitions.find(c=>c.name===(sayModal?'zeg':'afwezig')) : definitions.find(c=>c.name===i.commandName);
   if (!definition) return reply('Onbekend command.');
   if (definition.adminOnly && !i.memberPermissions?.has(PermissionFlagsBits.Administrator)) return reply('Je hebt beheerdersrechten nodig om dit command te gebruiken.');
   if (!modal && i.commandName==='afwezig') return i.showModal(absenceModal());
+  if (!modal && i.commandName==='zeg') return i.showModal(new ModalBuilder()
+    .setCustomId('lanoche:zeg').setTitle('La Noche • Bericht plaatsen')
+    .addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder()
+      .setCustomId('tekst').setLabel('Jouw tekst of lijst').setStyle(TextInputStyle.Paragraph)
+      .setPlaceholder('Plak hier je tekst. Meerdere regels zijn mogelijk.')
+      .setRequired(true).setMaxLength(2000))));
   await i.deferReply({flags:MessageFlags.Ephemeral});
   try {
+    if (sayModal) {
+      const content=i.fields.getTextInputValue('tekst');
+      if(!content.trim() || content.length>2000) throw new UserError('Vul tekst in van maximaal 2000 tekens.');
+      const channel=await i.guild.channels.fetch(i.channelId);
+      const send=channel?.isThread() ? PermissionFlagsBits.SendMessagesInThreads : PermissionFlagsBits.SendMessages;
+      if(!channel?.send || !channel.permissionsFor(i.guild.members.me)?.has([PermissionFlagsBits.ViewChannel,send]))
+        throw new UserError('Ik kan in dit kanaal geen berichten plaatsen. Controleer mijn kanaalrechten.');
+      const message=await channel.send({content,allowedMentions:{parse:[]}});
+      return i.editReply({content:`Je bericht is geplaatst.\n${message.url}`,allowedMentions:{parse:[]}});
+    }
     if (modal) return await submitAbsenceRequest(i,store);
     if (i.commandName==='warn') return await warnAction(i);
     if (['aangenomen','ontslaan','promotie','demote'].includes(i.commandName)) return await roleAction(i,store);

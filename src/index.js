@@ -89,7 +89,7 @@ client.on(Events.InteractionCreate, async interaction => {
   const transcript=interaction.isButton() && interaction.customId.startsWith('ln-transcript:');
   const absence=interaction.isButton() && interaction.customId.startsWith('ln-absence:');
   const ticket = (interaction.isButton() || interaction.isStringSelectMenu()) && interaction.customId.startsWith('ln-ticket:');
-  if (!transcript && !absence && !ticket && !interaction.isChatInputCommand() && !(interaction.isModalSubmit() && interaction.customId === 'lanoche:afwezig')) return;
+  if (!transcript && !absence && !ticket && !interaction.isChatInputCommand() && !(interaction.isModalSubmit() && ['lanoche:afwezig','lanoche:zeg'].includes(interaction.customId))) return;
   try {
     if (!ready) {
       await interaction.reply({ content: 'De bot start nog op. Probeer het zo opnieuw.', flags: MessageFlags.Ephemeral });
