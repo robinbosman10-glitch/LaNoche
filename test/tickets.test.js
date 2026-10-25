@@ -153,3 +153,43 @@ test('startup grants global role access to existing open and closed tickets, ski
  assert.equal(result.updated,2);assert.equal(result.failed,0);assert.deepEqual(edits.map(e=>e.channel),['open','closed']);
  for(const e of edits){assert.equal(e.args[0],settings.allTicketRole);assert.equal(e.args[1].ViewChannel,true);assert.equal(e.args[1].SendMessages,true);}
 });
+
+test('closing works when ticket owner is absent from Discord user cache after restart',async t=>{
+ const s=setup(t);await handleTicketInteraction(s.interaction('open'),'g',s.store);
+ const i=s.interaction('confirm-close','staff');
+ const {PermissionOverwriteManager,Client}=await import('discord.js');
+ const requests=[];
+ const client=new Client({intents:[]});
+ client.rest.put=async(...args)=>requests.push(args);
+ t.after(()=>client.destroy());
+ const channel={id:'ticket',client,guild:{roles:{resolveId:()=>null,resolve:()=>null}}};
+ const manager=new PermissionOverwriteManager(channel);
+ i.channel.permissionOverwrites=manager;
+ await handleTicketInteraction(i,'g',s.store);
+ assert.equal(requests.length,1);assert.equal(requests[0][1].body.type,1);
+ assert.equal(s.store.ticket('ticket').closed,1);
+ assert.equal(i.replies.at(-1).content,'Ticket gesloten.');
+});
+
+test('missing original message does not block closed notice and delete button',async t=>{
+ const s=setup(t);await handleTicketInteraction(s.interaction('open'),'g',s.store);
+ const i=s.interaction('confirm-close','staff');
+ i.channel.messages.fetch=async options=>{
+   if(typeof options==='object') return new Map();
+   throw Object.assign(new Error('Unknown Message'),{code:10008});
+ };
+ await handleTicketInteraction(i,'g',s.store);
+ assert.equal(s.store.ticket('ticket').closed,1);
+ assert.equal(s.sends.at(-1).components[0].toJSON().components[0].custom_id,'ln-ticket:delete-request');
+ assert.equal(i.replies.at(-1).content,'Ticket gesloten.');
+});
+
+test('permission failure explains required access and leaves ticket open',async t=>{
+ const s=setup(t);await handleTicketInteraction(s.interaction('open'),'g',s.store);
+ const i=s.interaction('confirm-close','staff');
+ i.channel.permissionOverwrites.edit=async()=>{throw Object.assign(new Error('Missing Permissions'),{code:50013});};
+ await handleTicketInteraction(i,'g',s.store);
+ assert.equal(s.store.ticket('ticket').closed,0);
+ assert.equal(s.store.pendingAudit('g').length,0);
+ assert.match(i.replies.at(-1).content,/Rollen beheren/);
+});

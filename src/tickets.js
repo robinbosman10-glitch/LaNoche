@@ -1,7 +1,7 @@
 import { captureTranscript } from './transcripts.js';
 import { queueTicketAudit } from './audit.js';
 import { settings } from './settings.js';
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ChannelType, PermissionFlagsBits as P, MessageFlags } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ChannelType, OverwriteType, PermissionFlagsBits as P, MessageFlags } from 'discord.js';
 import { branded, field } from './embeds.js';
 import { UserError } from './logic.js';
 export const ticketTypes = [
@@ -143,20 +143,34 @@ export async function handleTicketInteraction(i,guildId,store) {
         ticket.claimed=null;
       } else if(action==='confirm-close') {
         ticket.transcript=await captureTranscript(i.channel,ticket);
-        await i.channel.permissionOverwrites.edit(ticket.user,{SendMessages:false,AddReactions:false,CreatePublicThreads:false,CreatePrivateThreads:false,SendMessagesInThreads:false});
+        await i.channel.permissionOverwrites.edit(ticket.user,{SendMessages:false,AddReactions:false,CreatePublicThreads:false,CreatePrivateThreads:false,SendMessagesInThreads:false}, {type:OverwriteType.Member});
         ticket.closed=1;
       } else throw new UserError('Onbekende ticketactie.');
       store.updateTicket(ticket.channel,ticket);
       if(ticket.closed)queueTicketAudit(store,ticket,'closed',i.user.id,i.channel.name,ticket.transcript);
-      const message=await i.channel.messages.fetch(ticket.message);
-      await message.edit({...ticketPayload(ticket),attachments:[]});
+      try {
+        const message=await i.channel.messages.fetch(ticket.message);
+        await message.edit({...ticketPayload(ticket),attachments:[]});
+      } catch(error) {
+        // The ticket is already closed. A stale/missing header must not block
+        // the close notice and its delete button.
+        if(!ticket.closed) throw error;
+        console.error('Gesloten ticket: ticketbericht bijwerken mislukt', {channel:ticket.channel,code:error.code,message:error.message});
+      }
       if(ticket.closed) {
         await i.channel.setName(`gesloten-${i.channel.name}`.slice(0,100)).catch(()=>{});
         await i.channel.send({content:`🔒 Ticket gesloten door <@${i.user.id}>.`,allowedMentions:{parse:[]},components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('ln-ticket:delete-request').setLabel('Ticket verwijderen').setStyle(ButtonStyle.Danger).setEmoji('🗑️'))]});
       }
       await i.editReply({content:ticket.closed?'Ticket gesloten.':ticket.claimed?'Je hebt het ticket geclaimd.':'De claim is vrijgegeven.',components:[]});
     });
-  } catch(e) { if(e instanceof UserError) return i.editReply({content:e.message,allowedMentions:{parse:[]}}); throw e; }
+  } catch(e) {
+    if(e instanceof UserError) return i.editReply({content:e.message,allowedMentions:{parse:[]}});
+    if(e.code===50013 || e.code===50001) {
+      console.error('Ticketactie: ontbrekende Discord-rechten', {channel:i.channelId,action:i.customId,code:e.code,message:e.message});
+      return i.editReply({content:'De bot mist rechten in dit ticketkanaal. Controleer Kanaal bekijken, Berichtgeschiedenis lezen, Berichten verzenden en Rollen beheren (voor kanaalrechten). Voor verwijderen is ook Kanalen beheren nodig.',allowedMentions:{parse:[]}});
+    }
+    throw e;
+  }
 }
 
 export async function handleTicketMessage(message,guildId,store) {
