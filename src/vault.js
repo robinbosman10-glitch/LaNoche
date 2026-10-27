@@ -124,18 +124,27 @@ export function flushVaultPosts(guild,store) {
 const overviewTitle='🏦 LA NOCHE • KLUIS';
 export function vaultOverviewPayload(store,guild) {
  const balances=store.vaultBalances(guild);
- const fields=['wit','zwart'].map(kind=>({name:kind==='wit'?'⚪ WIT GELD':'⚫ ZWART GELD',value:`**$ ${(balances.find(b=>b.kind===kind)?.amount??0).toLocaleString('nl-NL')}**`,inline:true}));
- for(const [kind,title] of [['wapen','🔫 WAPENS'],['munitie','📦 MUNITIE'],['voorraad','🌿 OVERIGE VOORRAAD']]) {
-  const lines=balances.filter(b=>b.kind===kind && b.amount>0).map(b=>`**${b.amount.toLocaleString('nl-NL')}×** ${escapeMarkdown(b.item)}`);
+ const money=kind=>balances.find(b=>b.kind===kind)?.amount??0;
+ const currency=value=>`**$ ${value.toLocaleString('nl-NL')}**`;
+ const fields=[
+  {name:'⚪  WIT GELD',value:currency(money('wit')),inline:true},
+  {name:'⚫  ZWART GELD',value:currency(money('zwart')),inline:true},
+  {name:'💰  TOTAAL GELD',value:currency(money('wit')+money('zwart')),inline:true}
+ ];
+ for(const [kind,title,inline] of [['wapen','🔫  WAPENS',true],['munitie','📦  MUNITIE',true],['voorraad','🌿  OVERIGE VOORRAAD',false]]) {
+  const lines=balances.filter(b=>b.kind===kind && b.amount>0)
+   .sort((a,b)=>a.item.localeCompare(b.item,'nl'))
+   .map(b=>`**${b.amount.toLocaleString('nl-NL')}×** ${escapeMarkdown(b.item)}`);
   let block='';let part=0;
   for(const line of lines) {
-   if(block.length+line.length+1>1000){fields.push({name:title+(part++?' • vervolg':''),value:block,inline:false});block='';}
-   block+=(block?'\n':'')+line;
+   if(block.length+line.length+2>1000){fields.push({name:title+(part++?' • vervolg':''),value:block,inline});block='';}
+   block+=(block?'\n\n':'')+line;
   }
-  fields.push({name:title+(part?' • vervolg':''),value:block||'Geen voorraad',inline:false});
+  fields.push({name:title+(part?' • vervolg':''),value:block||'*Niet op voorraad*',inline});
  }
- const payload=branded(overviewTitle,`**De actuele inhoud van onze kluis**\nBoek toevoegen of verwijderen via **/kluis** in <#${vaultChannel}>.`,fields,'ticket-banner.gif','ticket-logo.gif');
- payload.embeds[0].setFooter({text:'LA NOCHE • Live kluisoverzicht'});
+ const payload=branded(overviewTitle,'**ACTUELE KLUISINHOUD**\nFinancieel saldo en beschikbare voorraad.',fields,'ticket-banner.gif','ticket-logo.gif');
+ payload.embeds[0].setAuthor({name:'LA NOCHE • KLUISBEHEER',iconURL:'attachment://ticket-logo.gif'})
+  .setFooter({text:'Automatisch bijgewerkt • Laatste controle'});
  return payload;
 }
 const overviewRuns=new Map();
@@ -161,7 +170,7 @@ export function syncVault(guild,store) {
   if(message) {
    const logo=message.attachments?.find(a=>a.name==='ticket-logo.gif');
    const banner=message.attachments?.find(a=>a.name==='ticket-banner.gif');
-   if(logo && banner){delete payload.files;payload.embeds[0].setAuthor({name:'LA NOCHE • OFFICIEEL',iconURL:logo.url}).setThumbnail(logo.url).setImage(banner.url);}
+   if(logo && banner){delete payload.files;payload.embeds[0].setAuthor({name:'LA NOCHE • KLUISBEHEER',iconURL:logo.url}).setThumbnail(logo.url).setImage(banner.url);}
    else payload.attachments=[];
    await message.edit(payload);
   }else message=await channel.send(payload);
