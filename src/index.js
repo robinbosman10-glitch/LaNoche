@@ -1,3 +1,4 @@
+import {handleBlacklist,syncBlacklist} from './blacklist.js';
 import {handleVault,flushVaultLogs,flushVaultPosts,syncVault} from './vault.js';
 import {handleMoney,syncMoney,flushMoneyLogs} from './money.js';
 import {syncRules} from './regels.js';
@@ -62,6 +63,7 @@ client.once(Events.ClientReady, async current => {
     store.initializeVault(guild.id);
     ready = true;
     const refreshMoney=()=>Promise.all([
+      syncBlacklist(guild,store).catch(error=>logError('Blacklist bijwerken mislukt',error)),
       flushVaultPosts(guild,store).then(()=>flushVaultLogs(guild,store)).catch(error=>logError('Kluisberichten plaatsen mislukt',error)),
       syncVault(guild,store).catch(error=>logError('Kluisoverzicht bijwerken mislukt',error)),
       syncMoney(guild,store).catch(error=>logError('Potjes bijwerken mislukt',error)),
@@ -112,7 +114,8 @@ client.on(Events.InteractionCreate, async interaction => {
       await interaction.reply({ content: 'De bot start nog op. Probeer het zo opnieuw.', flags: MessageFlags.Ephemeral });
       return;
     }
-    if(vault)await handleVault(interaction,config.guildId,store);
+    if(interaction.isChatInputCommand() && interaction.commandName==='blacklist')await handleBlacklist(interaction,config.guildId,store);
+    else if(vault)await handleVault(interaction,config.guildId,store);
     else if(money)await handleMoney(interaction,config.guildId,store);
     else if(transcript)await handleTranscript(interaction,store);
     else if (absence) await handleAbsenceInteraction(interaction,config.guildId,store);
@@ -134,11 +137,21 @@ client.on(Events.ShardReady, shardId => {
   }
   liveRefresh?.schedule();
 });
+const blacklistTimers=new Map();
+function scheduleBlacklist(guild) {
+  if(!ready || guild.id!==config.guildId || blacklistTimers.has(guild.id))return;
+  const timer=setTimeout(()=>{blacklistTimers.delete(guild.id);void syncBlacklist(guild,store).catch(error=>logError('Blacklist synchroniseren mislukt',error));},1500);
+  timer.unref();blacklistTimers.set(guild.id,timer);
+}
+client.on(Events.ChannelCreate,channel=>{if(channel.guild)scheduleBlacklist(channel.guild);});
+client.on(Events.ChannelUpdate,(_,channel)=>{if(channel.guild)scheduleBlacklist(channel.guild);});
+client.on(Events.GuildRoleUpdate,(_,role)=>scheduleBlacklist(role.guild));
 function relevantMember(member) { return member.guild.id === config.guildId && settings.ranks.some(id=>member.roles.cache.has(id)); }
 client.on(Events.GuildMemberUpdate, (before, after) => {
+  scheduleBlacklist(after.guild);
   if (relevantMember(before) || relevantMember(after)) liveRefresh?.schedule();
 });
-client.on(Events.GuildMemberAdd, member => { if (member.guild.id===config.guildId) liveRefresh?.schedule(); });
+client.on(Events.GuildMemberAdd, member => { scheduleBlacklist(member.guild); if (member.guild.id===config.guildId) liveRefresh?.schedule(); });
 client.on(Events.GuildMemberRemove, member => { if (member.guild.id===config.guildId) liveRefresh?.schedule(); });
 client.on(Events.MessageCreate, async message => {
   if (message.guildId !== config.guildId || message.author.bot || message.webhookId) return;

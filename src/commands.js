@@ -2,6 +2,7 @@ import { SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
 
 // Names and descriptions follow the supplied screenshots. Wiring comes later.
 export const definitions = [
+  ['blacklist', 'Blokkeer een lid voor de serverkanalen of herstel toegang', true, 'blacklist'],
   ['kluis', 'Beheer geld, wapens en voorraad in de kluis', false, 'losstaande kluisregistratie'],
   ['geldreset', 'Zet een gekozen potje of alle potjes op nul', false, 'geldreset voor bevoegde rol'],
   ['geld', 'Beheer zwart en wit geld in de potjes', false, 'geldbeheer voor leiding'],
@@ -27,6 +28,9 @@ export const commands = definitions.map(command => {
   if (['aangenomen', 'ontslaan', 'promotie', 'demote'].includes(command.name)) {
     builder.addUserOption(option => option.setName('persoon').setDescription('Het ganglid').setRequired(true));
     builder.addStringOption(option => option.setName('reden').setDescription('Toelichting bij deze wijziging').setMaxLength(700));
+  }
+  if (command.name === 'blacklist') {
+    for(const name of ['toevoegen','verwijderen'])builder.addSubcommand(sub=>sub.setName(name).setDescription(name==='toevoegen'?'Neem rollen af en blokkeer alle kanalen':'Hef de kanaalblokkade op zonder rollen terug te zetten').addUserOption(o=>o.setName('persoon').setDescription('Het lid').setRequired(true)));
   }
   if (command.name === 'promotie') builder.addRoleOption(option => option.setName('rang').setDescription('Gewenste hogere gangrang; leeg laten voor één rang omhoog').setRequired(false));
   if (command.name === 'kluis') {

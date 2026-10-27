@@ -6,7 +6,7 @@ import { readConfig } from '../src/config.js';
 import { handleInteraction } from '../src/handler.js';
 
 test('all commands serialize with safe default permissions', () => {
-  assert.deepEqual(commands.map(c => c.name).sort(), ['aangenomen','afwezig','demote','discordinactief','ledenlijst','ontslaan','promotie','rolaanvraag','sollistatus','ticket-panel','warn','zeg','geld','geldreset','kluis'].sort());
+  assert.deepEqual(commands.map(c => c.name).sort(), ['blacklist','aangenomen','afwezig','demote','discordinactief','ledenlijst','ontslaan','promotie','rolaanvraag','sollistatus','ticket-panel','warn','zeg','geld','geldreset','kluis'].sort());
   for (const command of commands) {
     assert.ok(command.description.length <= 100);
     if (!['afwezig','rolaanvraag','geld','geldreset','kluis'].includes(command.name)) assert.equal(command.default_member_permissions, '8');

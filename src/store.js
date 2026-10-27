@@ -42,6 +42,7 @@ export function createStore(directory) {
     },
     pendingVaultLogs(guild) {return db.prepare('SELECT id,payload FROM vault_log_outbox WHERE guild=? AND message IS NULL ORDER BY rowid LIMIT 50').all(guild).map(r=>({...JSON.parse(r.payload),id:r.id}));},
     markVaultLogged(id,message) {db.prepare('UPDATE vault_log_outbox SET message=? WHERE id=?').run(message,id);},
+    blacklistEntries(guild) {return db.prepare('SELECT value FROM meta WHERE key LIKE ?').all(`blacklist:${guild}:%`).map(r=>JSON.parse(r.value)).filter(Boolean);},
     getMeta(key) {return db.prepare('SELECT value FROM meta WHERE key=?').get(key)?.value;},
     setMeta(key,value) {db.prepare('INSERT OR REPLACE INTO meta VALUES (?,?)').run(key,value);},
     transcriptToken(guild,ticket) {
