@@ -5,15 +5,15 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {Collection,PermissionsBitField,PermissionFlagsBits as P} from 'discord.js';
 import {createStore} from '../src/store.js';
-import {handleBlacklist,syncBlacklist,blacklistKeepRole} from '../src/blacklist.js';
+import {handleBlacklist,syncBlacklist,blacklistKeepRole,blacklistRole,blacklistVisibleChannels} from '../src/blacklist.js';
 const permissions=bits=>new PermissionsBitField(bits);
 function fixture() {
  const role=(id,position,bits=0n)=>({id,position,editable:true,managed:false,permissions:permissions(bits),comparePositionTo:other=>position-other.position});
  const everyone=role('g',0),keep=role(blacklistKeepRole,1),rank=role('rank',2),admin=role('admin',8,P.Administrator);
- const roles=new Collection([[everyone.id,everyone],[keep.id,keep],[rank.id,rank],[admin.id,admin]]);
+ const roles=new Collection([[everyone.id,everyone],[keep.id,keep],[rank.id,rank],[admin.id,admin],[blacklistRole,role(blacklistRole,1)]]);
  const memberRoles=new Collection([[everyone.id,everyone],[keep.id,keep],[rank.id,rank]]);
  let removed=0,added=0,action='toevoegen',fail=false,authorized=true;
- const member={id:'target',manageable:true,roles:{cache:memberRoles,get highest(){return [...memberRoles.values()].sort((a,b)=>b.position-a.position)[0];},remove:async ids=>{removed++;ids.forEach(id=>memberRoles.delete(id));},add:async()=>{added++;}}};
+ const member={id:'target',manageable:true,roles:{cache:memberRoles,get highest(){return [...memberRoles.values()].sort((a,b)=>b.position-a.position)[0];},remove:async ids=>{removed++;(Array.isArray(ids)?ids:[ids]).forEach(id=>memberRoles.delete(id));},add:async id=>{added++;memberRoles.set(id,roles.get(id));}}};
  const actor={id:'actor',get permissions(){return permissions(authorized?P.Administrator:0n);},roles:{highest:admin}};
  const replies=[];
  const makeChannel=(id,view,extra=0n)=>{
@@ -26,6 +26,7 @@ function fixture() {
   }}};
  };
  const channels=new Collection([['one',makeChannel('one',true,P.SendMessages)],['two',makeChannel('two')],['three',makeChannel('three',false)]]);
+ for(const id of blacklistVisibleChannels)channels.set(id,makeChannel(id));
  const guild={id:'g',ownerId:'owner',members:{me:{permissions:permissions(P.Administrator)},fetch:async({user})=>user==='actor'?actor:member},roles:{cache:roles,fetch:async()=>roles},channels:{fetch:async()=>channels}};
  const i={guild,guildId:'g',inGuild:()=>true,user:{id:'actor'},deferReply:async()=>{},editReply:async p=>replies.push(p),reply:async p=>replies.push(p),options:{getUser:()=>({id:'target',bot:false}),getSubcommand:()=>action}};
  return {i,guild,member,channels,makeChannel,replies,removed:()=>removed,added:()=>added,setAction:x=>action=x,setFail:x=>fail=x,setAuthorized:x=>authorized=x};
@@ -37,18 +38,26 @@ function temporary(fn) {return async()=>{
 test('blacklist removes roles, blocks member-specific allows and removal never returns roles',temporary(async store=>{
  const f=fixture();await handleBlacklist(f.i,'g',store);
  assert.equal(f.removed(),1);assert.ok(f.member.roles.cache.has(blacklistKeepRole));assert.ok(!f.member.roles.cache.has('rank'));
- for(const c of f.channels.values())assert.ok(c.permissionOverwrites.cache.get('target').deny.has(P.ViewChannel));
+ for(const c of f.channels.values()) {
+  const visible=blacklistVisibleChannels.has(c.id);
+  assert.equal(c.permissionOverwrites.cache.get('target').allow.has(P.ViewChannel),visible);
+  assert.equal(c.permissionOverwrites.cache.get(blacklistRole).allow.has(P.ViewChannel),visible);
+ }
+ assert.ok(f.member.roles.cache.has(blacklistRole));
  assert.ok(f.channels.get('one').permissionOverwrites.cache.get('target').allow.has(P.SendMessages));
  await handleBlacklist(f.i,'g',store);assert.equal(f.removed(),1);
  f.setAction('verwijderen');await handleBlacklist(f.i,'g',store);
- assert.equal(f.added(),0);assert.ok(!f.member.roles.cache.has('rank'));assert.deepEqual(store.blacklistEntries('g'),[]);
+ assert.equal(f.added(),1);assert.ok(!f.member.roles.cache.has(blacklistRole));assert.ok(!f.member.roles.cache.has('rank'));assert.deepEqual(store.blacklistEntries('g'),[]);
  assert.ok(f.channels.get('one').permissionOverwrites.cache.get('target').allow.has(P.ViewChannel));
  assert.equal(f.channels.get('two').permissionOverwrites.cache.has('target'),false);
  assert.ok(f.channels.get('three').permissionOverwrites.cache.get('target').deny.has(P.ViewChannel));
  assert.match(f.replies.at(-1).content,/rollen blijven weg/);
 }));
 test('partial block persists and retries; new channels and later roles are covered',temporary(async(store,dir)=>{
- const f=fixture();f.setFail(true);await handleBlacklist(f.i,'g',store);
+ const f=fixture();
+ // Role rules already exist; simulate a member overwrite failure only.
+ for(const c of f.channels.values())await c.permissionOverwrites.edit(blacklistRole,{ViewChannel:blacklistVisibleChannels.has(c.id)});
+ f.setFail(true);await handleBlacklist(f.i,'g',store);
  assert.match(f.replies.at(-1).content,/nog niet gelukt/);assert.equal(store.blacklistEntries('g').length,1);
  const reopened=createStore(dir);
  try {
@@ -68,4 +77,28 @@ test('non-admin actors and retained Administrator roles are rejected',temporary(
  f.setAuthorized(true);f.member.roles.cache.get(blacklistKeepRole).permissions=permissions(P.Administrator);
  await handleBlacklist(f.i,'g',store);assert.match(f.replies.at(-1).content,/Administrator/);assert.equal(f.removed(),0);
  assert.deepEqual(store.blacklistEntries('g'),[]);
+}));
+
+test('existing all-hidden blacklists migrate to the three exceptions without losing original permissions',temporary(async store=>{
+ const f=fixture();const original={};
+ for(const c of f.channels.values()) {
+  const old=c.permissionOverwrites.cache.get('target');
+  original[c.id]={existed:Boolean(old),view:old?.deny.has(P.ViewChannel)?false:old?.allow.has(P.ViewChannel)?true:null};
+  await c.permissionOverwrites.edit('target',{ViewChannel:false});
+ }
+ store.setMeta('blacklist:g:target',JSON.stringify({user:'target',channels:original,status:'active',actor:'actor'}));
+ await syncBlacklist(f.guild,store);
+ assert.ok(f.member.roles.cache.has(blacklistRole));
+ for(const c of f.channels.values())assert.equal(c.permissionOverwrites.cache.get('target').allow.has(P.ViewChannel),blacklistVisibleChannels.has(c.id));
+ assert.deepEqual(store.blacklistEntries('g')[0].channels,original);
+ f.setAction('verwijderen');await handleBlacklist(f.i,'g',store);
+ assert.ok(!f.member.roles.cache.has(blacklistRole));assert.ok(!f.member.roles.cache.has('rank'));
+ for(const id of blacklistVisibleChannels)assert.equal(f.channels.get(id).permissionOverwrites.cache.has('target'),false);
+}));
+
+test('missing exception channels or an Administrator blacklist role stop addition before removing roles',temporary(async store=>{
+ const f=fixture();const id=[...blacklistVisibleChannels][0];const channel=f.channels.get(id);f.channels.delete(id);
+ await handleBlacklist(f.i,'g',store);assert.match(f.replies.at(-1).content,/ontbreekt/);assert.equal(f.removed(),0);
+ f.channels.set(id,channel);f.guild.roles.cache.get(blacklistRole).permissions=permissions(P.Administrator);
+ await handleBlacklist(f.i,'g',store);assert.match(f.replies.at(-1).content,/Administrator/);assert.equal(f.removed(),0);
 }));
