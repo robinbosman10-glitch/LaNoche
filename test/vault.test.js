@@ -17,11 +17,11 @@ test('compact vault embeds support deposits and withdrawals without a pot field'
  assert.equal(payload.files.length,2);assert.deepEqual(payload.allowedMentions,{parse:[]});
  }
 });
-test('vault checks lead role at command and submission; posts once in current channel',async()=>{
+test('vault checks lead role at command and submission; posts once in dedicated log channel',async()=>{
  let authorized=true,modal=false;const replies=[],sent=[];const meta=new Map();
  const store={getMeta:k=>meta.get(k),setMeta:(k,v)=>meta.set(k,v),changeMoney:()=>{throw new Error('must not touch pot balances');}};
  const channel={isThread:()=>false,permissionsFor:()=>new PermissionsBitField(P.Administrator),send:async payload=>{sent.push(payload);return {url:'https://discord.com/channels/g/c/m'};}};
- const i={id:'command',commandName:'kluis',guildId:'g',channelId:'current',user:{id:'user'},inGuild:()=>true,isModalSubmit:()=>modal,options:{getString:k=>k==='actie'?'add':'zwart'},fields:fields(),reply:async p=>replies.push(p),editReply:async p=>replies.push(p),deferReply:async()=>{},showModal:async m=>m.toJSON(),guild:{members:{me:{},fetch:async()=>({roles:{cache:new Map(authorized?[['1553521476378824796',{}]]:[])}})},channels:{fetch:async id=>{assert.equal(id,'current');return channel;}}}};
+ const i={id:'command',commandName:'kluis',guildId:'g',channelId:'current',user:{id:'user'},inGuild:()=>true,isModalSubmit:()=>modal,options:{getString:k=>k==='actie'?'add':'zwart'},fields:fields(),reply:async p=>replies.push(p),editReply:async p=>replies.push(p),deferReply:async()=>{},showModal:async m=>m.toJSON(),guild:{members:{me:{},fetch:async()=>({roles:{cache:new Map(authorized?[['1553521476378824796',{}]]:[])}})},channels:{fetch:async id=>{assert.equal(id,'1564634188278267914');return channel;}}}};
  const form=await handleVault(i,'g',store);assert.equal(form.components.length,3);
  modal=true;i.customId=form.custom_id;authorized=false;
  await handleVault(i,'g',store);assert.equal(sent.length,0);assert.match(replies.at(-1).content,/leidingrol/);

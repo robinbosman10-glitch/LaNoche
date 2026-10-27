@@ -4,6 +4,7 @@ import {createHash} from 'node:crypto';
 import {branded} from './embeds.js';
 import {parseAmount} from './money-store.js';
 import {UserError} from './logic.js';
+export const vaultChannel='1564634188278267914';
 const leadRole='1553521476378824796';
 const active=new Set();
 export function vaultPayload({action,kind,date,amount,reason,actor}) {
@@ -55,9 +56,9 @@ export async function handleVault(i,guildId,store) {
     const saved=store.getMeta(key);
     if(saved)return respond(`Deze registratie is al geplaatst.\n${saved}`);
     const input=vaultInput(i.fields);
-    const channel=await i.guild.channels.fetch(i.channelId);
+    const channel=await i.guild.channels.fetch(vaultChannel);
     const send=channel?.isThread()?P.SendMessagesInThreads:P.SendMessages;
-    if(!channel?.send || !channel.permissionsFor(i.guild.members.me)?.has([P.ViewChannel,send,P.EmbedLinks,P.AttachFiles]))throw new UserError('Ik mis rechten om de kluis-embed in dit kanaal te plaatsen.');
+    if(!channel?.send || !channel.permissionsFor(i.guild.members.me)?.has([P.ViewChannel,send,P.EmbedLinks,P.AttachFiles]))throw new UserError('Ik mis rechten om de kluis-embed in het kluislogkanaal te plaatsen.');
     const payload=vaultPayload({...input,action,kind,actor:i.user.id});
     payload.nonce=createHash('sha256').update(key).digest('hex').slice(0,24);payload.enforceNonce=true;
     const message=await channel.send(payload);
