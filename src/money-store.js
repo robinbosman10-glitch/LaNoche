@@ -21,6 +21,24 @@ export function moneyStore(db) {
   db.exec(`CREATE TABLE IF NOT EXISTS money_balances (guild TEXT,kind TEXT,pot TEXT,amount INTEGER NOT NULL CHECK(amount>=0),PRIMARY KEY(guild,kind,pot));
     CREATE TABLE IF NOT EXISTS money_transactions (id TEXT PRIMARY KEY,guild TEXT,actor TEXT,kind TEXT,action TEXT,amount INTEGER,pot TEXT,time INTEGER,deltas TEXT);`);
   return {
+    initializeMoney(guild) {
+      const key=`money-opening-2026-10-27:${guild}`;
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        if(db.prepare('SELECT value FROM meta WHERE key=?').get(key)) {db.exec('COMMIT');return false;}
+        // Historical balances from the supplied screenshot, not new income to split.
+        // Add the opening balance so any subsequent bookings already made survive.
+        const opening={zwart:[250000,512000,512000],wit:[892000,1380000,0]};
+        for(const [kind,amounts] of Object.entries(opening)) {
+          for(const [i,pot] of pots.entries()) {
+            db.prepare('INSERT INTO money_balances VALUES (?,?,?,?) ON CONFLICT(guild,kind,pot) DO UPDATE SET amount=amount+excluded.amount').run(guild,kind,pot,amounts[i]);
+          }
+          db.prepare('INSERT INTO money_transactions VALUES (?,?,?,?,?,?,?,?,?)').run(`${key}:${kind}`,guild,'beginstand',kind,'opening',amounts.reduce((a,b)=>a+b,0),null,Date.now(),JSON.stringify(amounts));
+        }
+        db.prepare('INSERT INTO meta VALUES (?,?)').run(key,'done');
+        db.exec('COMMIT');return true;
+      } catch(error) {db.exec('ROLLBACK');throw error;}
+    },
     moneyBalances(guild) { return db.prepare('SELECT kind,pot,amount FROM money_balances WHERE guild=?').all(guild); },
     moneyHistory(guild) { return db.prepare('SELECT * FROM money_transactions WHERE guild=? ORDER BY rowid DESC LIMIT 5').all(guild); },
     changeMoney({id,guild,actor,kind,action,amount,pot}) {

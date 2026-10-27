@@ -55,6 +55,7 @@ client.once(Events.ClientReady, async current => {
     // Own dedicated application: synchronizes the configured commands in this guild.
     await guild.commands.set(commands);
     store.beginAbsenceReset(guild.id,absenceResetVersion);
+    store.initializeMoney(guild.id);
     ready = true;
     const refreshMoney=()=>syncMoney(guild,store).catch(error=>logError('Potjes bijwerken mislukt',error));
     void refreshMoney();

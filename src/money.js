@@ -15,7 +15,7 @@ export function moneyPayload(store,guild) {
   const fields=pots.map((pot,i)=>field(names[pot],`⚫ **Zwart:** ${format(balance('zwart',pot))} · ${shares.zwart[i]}%\n⚪ **Wit:** ${format(balance('wit',pot))} · ${shares.wit[i]}%`,false));
   fields.push(field('💎 TOTAAL',`⚫ ${format(pots.reduce((n,p)=>n+balance('zwart',p),0))}\n⚪ ${format(pots.reduce((n,p)=>n+balance('wit',p),0))}`,false));
   const history=store.moneyHistory(guild);
-  fields.push(field('📋 LAATSTE BOEKINGEN',history.map(t=>`${t.action==='add'?'➕':'➖'} **${format(t.amount)} ${t.kind}**${t.pot?` · ${names[t.pot]}`:' · verdeeld'}\n<@${t.actor}> · <t:${Math.floor(t.time/1000)}:f>`).join('\n\n')||'Nog geen boekingen. Beginstand: $ 0.',false));
+  fields.push(field('📋 LAATSTE BOEKINGEN',history.map(t=>`${t.action==='opening'?'🏁':t.action==='add'?'➕':'➖'} **${format(t.amount)} ${t.kind}**${t.action==='opening'?' · beginstand':t.pot?` · ${names[t.pot]}`:' · verdeeld'}\n${t.action==='opening'?'Overgenomen uit bestaand overzicht':`<@${t.actor}>`} · <t:${Math.floor(t.time/1000)}:f>`).join('\n\n')||'Nog geen boekingen. Beginstand: $ 0.',false));
   const payload=branded(title,'**Elke bijdrage op de juiste plek.**\nToevoegingen worden automatisch verdeeld. Uitgaven gaan uit één gekozen potje.\nGebruik **/geld** om een boeking te doen.',fields,'ticket-banner.gif','ticket-logo.gif');
   payload.components=[row(new ButtonBuilder().setCustomId('ln-money:start').setLabel('Geld beheren').setEmoji('💰').setStyle(ButtonStyle.Primary))];
   return payload;

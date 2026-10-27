@@ -67,3 +67,18 @@ test('dashboard edits existing message after reload instead of sending duplicate
  await syncMoney(guild,s);s.changeMoney(event);await syncMoney(guild,s);
  assert.equal(sends,1);assert.equal(edits,1);assert.equal(s.getMeta('money-panel:g'),'panel');
 });
+
+test('historical opening balances are exact and imported once across restarts',()=>{
+ const dir=mkdtempSync(join(tmpdir(),'ln-money-opening-'));let s=createStore(dir);
+ try {
+  s.changeMoney(event); // Preserve bookings made before the opening import.
+  assert.equal(s.initializeMoney('g'),true);
+  const values=Object.fromEntries(s.moneyBalances('g').map(b=>[`${b.kind}:${b.pot}`,b.amount]));
+  assert.deepEqual(values,{'zwart:gang':350000,'zwart:drugs':962000,'zwart:wapens':962000,'wit:gang':892000,'wit:drugs':1380000,'wit:wapens':0});
+  assert.equal(s.initializeMoney('g'),false);
+  s.close();s=createStore(dir);assert.equal(s.initializeMoney('g'),false);
+  assert.deepEqual(Object.fromEntries(s.moneyBalances('g').map(b=>[`${b.kind}:${b.pot}`,b.amount])),values);
+  const fields=moneyPayload(s,'g').embeds[0].toJSON().fields;
+  assert.match(fields.at(-1).value,/beginstand/);assert.doesNotMatch(fields.at(-1).value,/<@beginstand>/);
+ } finally{s.close();rmSync(dir,{recursive:true,force:true});}
+});
