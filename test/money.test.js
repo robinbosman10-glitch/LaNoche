@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createStore} from '../src/store.js';
 import {allocation,parseAmount} from '../src/money-store.js';
-import {handleMoney,moneyRole,moneyPayload,syncMoney} from '../src/money.js';
+import {handleMoney,moneyRole,moneyPayload,syncMoney,flushMoneyLogs,moneyLogPayload,moneyLogChannel} from '../src/money.js';
 function fixture(t){const dir=mkdtempSync(join(tmpdir(),'ln-money-'));const store=createStore(dir);t.after(()=>{store.close();rmSync(dir,{recursive:true,force:true});});return store;}
 const event={id:'first',guild:'g',actor:'lead',kind:'zwart',action:'add',amount:1_000_000};
 test('amount parsing and exact percentage allocation without loss',()=>{
@@ -36,7 +36,7 @@ test('balances and duplicate protection survive reopening',()=>{
 function interaction(customId='ln-money:start',authorized=true){
  const replies=[];
  const member={roles:{cache:new Map(authorized?[[moneyRole,{}]]:[])}};
- return {id:'source',customId,replies,inGuild:()=>true,guildId:'g',user:{id:'lead'},guild:{members:{fetch:async()=>member}},reply:async p=>{replies.push(p);return p;},update:async p=>{replies.push(p);return p;},showModal:async m=>m.toJSON(),deferReply:async function(){this.deferred=true;},editReply:async p=>{replies.push(p);return p;}};
+ return {id:'source',customId,replies,inGuild:()=>true,guildId:'g',user:{id:'lead'},guild:{id:'g',members:{fetch:async()=>member}},reply:async p=>{replies.push(p);return p;},update:async p=>{replies.push(p);return p;},showModal:async m=>m.toJSON(),deferReply:async function(){this.deferred=true;},editReply:async p=>{replies.push(p);return p;}};
 }
 test('role enforced at start and submit, including administrators without lead role',async t=>{
  const s=fixture(t);
@@ -58,7 +58,7 @@ test('failed dashboard update does not lose or duplicate a saved booking',async 
  i.fields={getTextInputValue:()=> '1 miljoen'};i.guild.channels={fetch:async()=>{throw new Error('offline');}};
  await handleMoney(i,'g',s);assert.match(i.replies.at(-1).content,/opgeslagen/);
  await handleMoney(i,'g',s);assert.equal(s.moneyHistory('g').length,1);assert.match(i.replies.at(-1).content,/al verwerkt/);
- const payload=moneyPayload(s,'g');assert.equal(payload.embeds[0].toJSON().fields.length,5);assert.equal(payload.files.length,2);
+ const payload=moneyPayload(s,'g');assert.equal(payload.embeds[0].toJSON().fields.length,4);assert.equal(payload.files.length,2);
 });
 test('dashboard edits existing message after reload instead of sending duplicates',async t=>{
  const s=fixture(t);let sends=0,edits=0;const message={id:'panel',attachments:[],edit:async()=>{edits++;}};
@@ -79,6 +79,19 @@ test('historical opening balances are exact and imported once across restarts',(
   s.close();s=createStore(dir);assert.equal(s.initializeMoney('g'),false);
   assert.deepEqual(Object.fromEntries(s.moneyBalances('g').map(b=>[`${b.kind}:${b.pot}`,b.amount])),values);
   const fields=moneyPayload(s,'g').embeds[0].toJSON().fields;
-  assert.match(fields.at(-1).value,/beginstand/);assert.doesNotMatch(fields.at(-1).value,/<@beginstand>/);
+  assert.equal(fields.length,4);assert.ok(fields.every(f=>!f.name.includes('BOEKING')));
  } finally{s.close();rmSync(dir,{recursive:true,force:true});}
+});
+
+test('money logs retry failures and record deliveries without changing balances',async t=>{
+ const s=fixture(t);s.initializeMoney('g');s.changeMoney(event);
+ const before=s.moneyBalances('g');let fail=true;const sent=[];
+ const guild={id:'g',channels:{fetch:async id=>{assert.equal(id,moneyLogChannel);return {send:async payload=>{if(fail)throw new Error('offline');sent.push(payload);return {id:String(sent.length)};}};}}};
+ await assert.rejects(flushMoneyLogs(guild,s),/offline/);assert.equal(s.pendingMoneyLogs('g').length,3);
+ fail=false;await flushMoneyLogs(guild,s);await flushMoneyLogs(guild,s);
+ assert.equal(sent.length,3);assert.equal(s.pendingMoneyLogs('g').length,0);assert.deepEqual(s.moneyBalances('g'),before);
+ for(const p of sent){assert.deepEqual(p.allowedMentions,{parse:[]});assert.equal(p.files.length,2);assert.equal(p.enforceNonce,true);assert.ok(p.nonce.length<=25);p.embeds[0].toJSON();}
+ s.changeMoney({...event,id:'withdraw',action:'remove',pot:'gang',amount:100});
+ const log=moneyLogPayload(s.pendingMoneyLogs('g')[0]).embeds[0].toJSON();
+ assert.match(log.description,/VERWIJDERD/);assert.match(log.fields.find(f=>f.name.includes('PER POTJE')).value,/−\$ 100/);
 });

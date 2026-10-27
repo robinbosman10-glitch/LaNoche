@@ -1,8 +1,10 @@
+import {createHash} from 'node:crypto';
 import {ActionRowBuilder,ButtonBuilder,ButtonStyle,StringSelectMenuBuilder,ModalBuilder,TextInputBuilder,TextInputStyle,MessageFlags,PermissionFlagsBits as P} from 'discord.js';
 import {branded,field} from './embeds.js';
 import {UserError} from './logic.js';
 import {parseAmount,pots,shares} from './money-store.js';
 export const moneyChannel='1563644518991925318';
+export const moneyLogChannel='1564621640271265792';
 export const moneyRole='1553521476378824796';
 const title='💰 LA NOCHE • POTJES';
 const names={gang:'🏦 Gang pot',drugs:'🌿 Drugs pot',wapens:'🔫 Wapen pot'};
@@ -14,8 +16,6 @@ export function moneyPayload(store,guild) {
   const balance=(kind,pot)=>balances.find(b=>b.kind===kind && b.pot===pot)?.amount??0;
   const fields=pots.map((pot,i)=>field(names[pot],`⚫ **Zwart:** ${format(balance('zwart',pot))} · ${shares.zwart[i]}%\n⚪ **Wit:** ${format(balance('wit',pot))} · ${shares.wit[i]}%`,false));
   fields.push(field('💎 TOTAAL',`⚫ ${format(pots.reduce((n,p)=>n+balance('zwart',p),0))}\n⚪ ${format(pots.reduce((n,p)=>n+balance('wit',p),0))}`,false));
-  const history=store.moneyHistory(guild);
-  fields.push(field('📋 LAATSTE BOEKINGEN',history.map(t=>`${t.action==='opening'?'🏁':t.action==='add'?'➕':'➖'} **${format(t.amount)} ${t.kind}**${t.action==='opening'?' · beginstand':t.pot?` · ${names[t.pot]}`:' · verdeeld'}\n${t.action==='opening'?'Overgenomen uit bestaand overzicht':`<@${t.actor}>`} · <t:${Math.floor(t.time/1000)}:f>`).join('\n\n')||'Nog geen boekingen. Beginstand: $ 0.',false));
   const payload=branded(title,'**Elke bijdrage op de juiste plek.**\nToevoegingen worden automatisch verdeeld. Uitgaven gaan uit één gekozen potje.\nGebruik **/geld** om een boeking te doen.',fields,'ticket-banner.gif','ticket-logo.gif');
   payload.components=[row(new ButtonBuilder().setCustomId('ln-money:start').setLabel('Geld beheren').setEmoji('💰').setStyle(ButtonStyle.Primary))];
   return payload;
@@ -83,6 +83,7 @@ export async function handleMoney(i,guildId,store) {
     await i.deferReply({flags:MessageFlags.Ephemeral});
     const amount=parseAmount(i.fields.getTextInputValue('bedrag'));
     const changed=store.changeMoney({id:`${i.guildId}:${i.user.id}:${nonce}`,guild:i.guildId,actor:i.user.id,kind,action,amount,pot:action==='remove'?pot:undefined});
+    void flushMoneyLogs(i.guild,store).catch(e=>console.error('Geldlog plaatsen mislukt',e.code??e.name));
     let synced=true;
     try {await syncMoney(i.guild,store);}catch(e){synced=false;console.error('Potjes bijwerken mislukt',e.code??e.name);}
     return i.editReply({content:`${changed?`${format(amount)} ${kind} geld ${action==='add'?'toegevoegd en verdeeld':`verwijderd uit ${names[pot]}`}.`:'Deze boeking was al verwerkt; er is niets dubbel geboekt.'}\n${synced?`Het overzicht staat in <#${moneyChannel}>.`:'De boeking is opgeslagen. Het overzicht wordt automatisch opnieuw bijgewerkt; voer deze boeking niet opnieuw in.'}`,allowedMentions:{parse:[]}});
@@ -91,4 +92,39 @@ export async function handleMoney(i,guildId,store) {
     if(i.deferred)return i.editReply({content:e.message});
     return respond(e.message);
   }
+}
+
+
+export function moneyLogPayload(t) {
+  const opening=t.action==='opening';
+  const added=t.action==='add';
+  const deltas=JSON.parse(t.deltas);
+  const payload=branded('💰 LA NOCHE • GELDLOG',
+    opening?'🏁 **BEGINSTAND OVERGENOMEN**':added?'🟢 **GELD TOEGEVOEGD**':'🔴 **GELD VERWIJDERD**',[
+      field('💵 BEDRAG',format(t.amount)),
+      field('💱 GELDSOORT',t.kind==='zwart'?'⚫ Zwart geld':'⚪ Wit geld'),
+      field('👤 UITGEVOERD DOOR',opening?'Beginstand uit bestaand overzicht':`<@${t.actor}>`),
+      field('📊 BOEKING PER POTJE',pots.map((p,i)=>`${names[p]}: **${deltas[i]<0?'−':'+'}${format(Math.abs(deltas[i]))}**`).join('\n'),false),
+      field('🕒 DATUM & TIJD',`<t:${Math.floor(t.time/1000)}:F>`,false)
+    ],'ticket-banner.gif','ticket-logo.gif');
+  payload.embeds[0].setColor(opening?0xff7900:added?0x2ecc71:0xed4245).setTimestamp(t.time).setFooter({text:`LA NOCHE • Boeking ${t.id}`});
+  payload.nonce=createHash('sha256').update(t.id).digest('hex').slice(0,24);
+  payload.enforceNonce=true;
+  return payload;
+}
+const logRuns=new Map();
+export function flushMoneyLogs(guild,store) {
+  if(logRuns.has(guild.id))return logRuns.get(guild.id);
+  const run=(async()=>{
+    const pending=store.pendingMoneyLogs(guild.id);
+    if(!pending.length)return;
+    const channel=await guild.channels.fetch(moneyLogChannel);
+    if(!channel?.send)throw new UserError('Het geldlogkanaal ontbreekt.');
+    for(const t of pending) {
+      const message=await channel.send(moneyLogPayload(t));
+      store.markMoneyLogged(t.id,message.id);
+    }
+  })();
+  logRuns.set(guild.id,run);
+  return run.finally(()=>{logRuns.delete(guild.id);});
 }

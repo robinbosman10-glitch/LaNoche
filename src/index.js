@@ -1,4 +1,4 @@
-import {handleMoney,syncMoney} from './money.js';
+import {handleMoney,syncMoney,flushMoneyLogs} from './money.js';
 import {syncRules} from './regels.js';
 import {syncGangInformation} from './gang-informatie.js';
 import {syncRadio} from './radio.js';
@@ -57,7 +57,10 @@ client.once(Events.ClientReady, async current => {
     store.beginAbsenceReset(guild.id,absenceResetVersion);
     store.initializeMoney(guild.id);
     ready = true;
-    const refreshMoney=()=>syncMoney(guild,store).catch(error=>logError('Potjes bijwerken mislukt',error));
+    const refreshMoney=()=>Promise.all([
+      syncMoney(guild,store).catch(error=>logError('Potjes bijwerken mislukt',error)),
+      flushMoneyLogs(guild,store).catch(error=>logError('Geldlogs plaatsen mislukt',error))
+    ]);
     void refreshMoney();
     moneyTimer=setInterval(refreshMoney,60000);moneyTimer.unref();
     const sendLogs=()=>upgradeTicketLogs(guild,store).catch(error=>logError('Bestaande ticketlogs bijwerken mislukt',error)).then(()=>flushAudit(guild,store)).catch(error=>logError('Logboek bijwerken mislukt',error));

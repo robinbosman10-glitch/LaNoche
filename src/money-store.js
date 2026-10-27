@@ -19,6 +19,7 @@ export function allocation(amount,kind) {
 }
 export function moneyStore(db) {
   db.exec(`CREATE TABLE IF NOT EXISTS money_balances (guild TEXT,kind TEXT,pot TEXT,amount INTEGER NOT NULL CHECK(amount>=0),PRIMARY KEY(guild,kind,pot));
+    CREATE TABLE IF NOT EXISTS money_log_messages (id TEXT PRIMARY KEY,message TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS money_transactions (id TEXT PRIMARY KEY,guild TEXT,actor TEXT,kind TEXT,action TEXT,amount INTEGER,pot TEXT,time INTEGER,deltas TEXT);`);
   return {
     initializeMoney(guild) {
@@ -39,6 +40,8 @@ export function moneyStore(db) {
         db.exec('COMMIT');return true;
       } catch(error) {db.exec('ROLLBACK');throw error;}
     },
+    pendingMoneyLogs(guild) { return db.prepare('SELECT t.* FROM money_transactions t LEFT JOIN money_log_messages l ON l.id=t.id WHERE t.guild=? AND l.id IS NULL ORDER BY t.rowid LIMIT 50').all(guild); },
+    markMoneyLogged(id,message) { db.prepare('INSERT OR IGNORE INTO money_log_messages VALUES (?,?)').run(id,message); },
     moneyBalances(guild) { return db.prepare('SELECT kind,pot,amount FROM money_balances WHERE guild=?').all(guild); },
     moneyHistory(guild) { return db.prepare('SELECT * FROM money_transactions WHERE guild=? ORDER BY rowid DESC LIMIT 5').all(guild); },
     changeMoney({id,guild,actor,kind,action,amount,pot}) {
