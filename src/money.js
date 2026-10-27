@@ -69,14 +69,20 @@ async function handleMoneyReset(i,guildId,store) {
   await i.deferReply({flags:MessageFlags.Ephemeral});
   const member=await i.guild.members.fetch({user:i.user.id,force:true});
   if(!member.roles.cache.has(moneyResetRole))return i.editReply({content:'Alleen de aangewezen resetrol kan potjes resetten.'});
-  if(i.commandName==='geldreset')return i.editReply({content:'**Welk potje wil je resetten?**\nZwart én wit geld van je keuze gaan direct naar 0. Percentages blijven hetzelfde.',components:[row(new StringSelectMenuBuilder().setCustomId('ln-money:reset-select').setPlaceholder('Kies een potje of Alles').addOptions(...pots.map(p=>({label:names[p],value:p})),{label:'Alles',value:'all',emoji:'🔄'}))]});
+  if(i.commandName==='geldreset')return i.editReply({content:'**Welke geldsoort wil je resetten?**',components:[row(new StringSelectMenuBuilder().setCustomId('ln-money:reset-kind').setPlaceholder('Kies zwart of wit geld').addOptions({label:'Zwart geld',value:'zwart',emoji:'⚫'},{label:'Wit geld',value:'wit',emoji:'⚪'}))]});
+  if(i.customId==='ln-money:reset-kind') {
+    const selected=i.values?.[0];
+    if(!['zwart','wit'].includes(selected))return i.editReply({content:'Kies zwart of wit geld via /geldreset.'});
+    return i.editReply({content:`**${selected==='zwart'?'⚫ Zwart':'⚪ Wit'} geld resetten** — kies een potje.\n**Eén potje:** alleen de gekozen geldsoort.\n**Alles:** alle potjes, zwart én wit. Percentages blijven hetzelfde.`,components:[row(new StringSelectMenuBuilder().setCustomId(`ln-money:reset-select:${selected}`).setPlaceholder('Kies een potje of Alles').addOptions(...pots.map(p=>({label:names[p],value:p})),{label:'Alles',description:'Alle potjes resetten: zwart én wit geld',value:'all',emoji:'🔄'}))]});
+  }
   const pot=i.values?.[0];
-  if(i.customId!=='ln-money:reset-select' || (pot!=='all' && !pots.includes(pot)))return i.editReply({content:'Kies een geldig potje via /geldreset.'});
-  const changed=store.resetMoney({guild:i.guildId,actor:i.user.id,id:`money-reset:${i.guildId}:${i.id}`,pot});
+  const kind=i.customId?.split(':')[2];
+  if(!['ln-money:reset-select:zwart','ln-money:reset-select:wit'].includes(i.customId) || (pot!=='all' && !pots.includes(pot)))return i.editReply({content:'Kies geldsoort en potje via /geldreset.'});
+  const changed=store.resetMoney({guild:i.guildId,actor:i.user.id,id:`money-reset:${i.guildId}:${i.id}`,pot,kind});
   void flushMoneyLogs(i.guild,store).catch(e=>console.error('Resetlog plaatsen mislukt',e.code??e.name));
   let synced=true;
   try{await syncMoney(i.guild,store);}catch(e){synced=false;console.error('Potjes na reset bijwerken mislukt',e.code??e.name);}
-  return i.editReply({content:`${changed?`${pot==='all'?'Alle potjes':names[pot]}: zwart en wit geld staan op 0. De percentages zijn behouden.`:'Deze reset was al verwerkt.'}${synced?'':' De reset is opgeslagen; het overzicht wordt automatisch opnieuw bijgewerkt.'}`,allowedMentions:{parse:[]}});
+  return i.editReply({content:`${changed?`${pot==='all'?'Alle potjes':names[pot]}: ${pot==='all'?'zwart en wit geld staan':`${kind} geld staat`} op 0. De percentages zijn behouden.`:'Deze reset was al verwerkt.'}${synced?'':' De reset is opgeslagen; het overzicht wordt automatisch opnieuw bijgewerkt.'}`,allowedMentions:{parse:[]}});
 }
 export async function handleMoney(i,guildId,store) {
   if(i.commandName==='geldreset' || i.customId?.startsWith('ln-money:reset'))return handleMoneyReset(i,guildId,store);

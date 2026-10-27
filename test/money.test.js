@@ -125,18 +125,18 @@ test('one-time log reset deletes only old bot money logs, retains balances and n
  assert.equal(sent.length,1);assert.deepEqual(deleted,['old']);assert.equal(s.moneyHistory('g').length,3);
 });
 
-test('selected pot reset clears both kinds, keeps other pots and is idempotent',t=>{
+test('selected pot reset clears only chosen kind, keeps other pots and is idempotent',t=>{
  const s=fixture(t);s.initializeMoney('g');
- assert.equal(s.resetMoney({guild:'g',actor:'boss',id:'reset-one',pot:'drugs'}),true);
- const balances=s.moneyBalances('g');assert.ok(balances.filter(b=>b.pot==='drugs').every(b=>b.amount===0));
+ assert.equal(s.resetMoney({guild:'g',actor:'boss',id:'reset-one',pot:'drugs',kind:'zwart'}),true);
+ const balances=s.moneyBalances('g');assert.ok(balances.filter(b=>b.pot==='drugs'&&b.kind==='zwart').every(b=>b.amount===0));
  assert.equal(balances.find(b=>b.pot==='gang'&&b.kind==='wit').amount,892000);
  assert.equal(balances.find(b=>b.pot==='wapens'&&b.kind==='zwart').amount,512000);
  const log=s.moneyHistory('g').find(t=>t.id==='reset-one:zwart');
  assert.equal(log.actor,'boss');assert.equal(log.pot,'drugs');assert.deepEqual(JSON.parse(log.deltas),[0,-512000,0]);
- s.changeMoney(event);assert.equal(s.resetMoney({guild:'g',actor:'boss',id:'reset-one',pot:'drugs'}),false);
+ s.changeMoney(event);assert.equal(s.resetMoney({guild:'g',actor:'boss',id:'reset-one',pot:'drugs',kind:'zwart'}),false);
  assert.equal(s.moneyBalances('g').find(b=>b.pot==='drugs'&&b.kind==='zwart').amount,450000);
  assert.throws(()=>s.resetMoney({guild:'g',actor:'boss',id:'invalid',pot:'invalid'}),/geldig/);
- s.resetMoney({guild:'g',actor:'boss',id:'reset-all',pot:'all'});assert.ok(s.moneyBalances('g').every(b=>b.amount===0));
+ s.resetMoney({guild:'g',actor:'boss',id:'reset-all',pot:'all',kind:'wit'});assert.ok(s.moneyBalances('g').every(b=>b.amount===0));
 });
 test('geldreset restricts both command and selection to the exact reset role',async t=>{
  const s=fixture(t);s.initializeMoney('g');
@@ -145,13 +145,16 @@ test('geldreset restricts both command and selection to the exact reset role',as
  await handleMoney(i,'g',s);assert.match(i.replies.at(-1).content,/resetrol/); // lead role is insufficient
  i.guild.members.fetch=async()=>({roles:{cache:new Map([[moneyResetRole,{}]])}});
  await handleMoney(i,'g',s);
+ assert.deepEqual(i.replies.at(-1).components[0].toJSON().components[0].options.map(o=>o.value),['zwart','wit']);
+ i.commandName=undefined;i.customId='ln-money:reset-kind';i.values=['wit'];await handleMoney(i,'g',s);
  assert.deepEqual(i.replies.at(-1).components[0].toJSON().components[0].options.map(o=>o.value),['gang','drugs','wapens','all']);
- i.commandName=undefined;i.customId='ln-money:reset-select';i.values=['gang'];
+ i.commandName=undefined;i.customId='ln-money:reset-select:wit';i.values=['gang'];
  i.guild.members.fetch=async()=>({roles:{cache:new Map()}});
  await handleMoney(i,'g',s);assert.match(i.replies.at(-1).content,/resetrol/);
  assert.equal(s.moneyBalances('g').find(b=>b.pot==='gang'&&b.kind==='wit').amount,892000);
  i.guild.members.fetch=async()=>({roles:{cache:new Map([[moneyResetRole,{}]])}});
  i.guild.channels={fetch:async()=>{throw new Error('offline');}};
  await handleMoney(i,'g',s);assert.match(i.replies.at(-1).content,/opgeslagen/);
- assert.ok(s.moneyBalances('g').filter(b=>b.pot==='gang').every(b=>b.amount===0));
+ assert.ok(s.moneyBalances('g').filter(b=>b.pot==='gang'&&b.kind==='wit').every(b=>b.amount===0));
+ assert.equal(s.moneyBalances('g').find(b=>b.pot==='gang'&&b.kind==='zwart').amount,250000);
 });

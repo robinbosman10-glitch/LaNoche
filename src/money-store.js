@@ -22,17 +22,19 @@ export function moneyStore(db) {
     CREATE TABLE IF NOT EXISTS money_log_messages (id TEXT PRIMARY KEY,message TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS money_transactions (id TEXT PRIMARY KEY,guild TEXT,actor TEXT,kind TEXT,action TEXT,amount INTEGER,pot TEXT,time INTEGER,deltas TEXT);`);
   return {
-    resetMoney({guild,actor,id,pot}) {
+    resetMoney({guild,actor,id,pot,kind}) {
       if(pot!=='all' && !pots.includes(pot))throw new UserError('Kies een geldig potje.');
+      if(!['zwart','wit'].includes(kind) && !(pot==='all' && kind==='all'))throw new UserError('Kies zwart of wit geld.');
+      const kinds=pot==='all'?['zwart','wit']:[kind];
       db.exec('BEGIN IMMEDIATE');
       try {
-        if(db.prepare('SELECT id FROM money_transactions WHERE id=?').get(`${id}:zwart`)) {db.exec('COMMIT');return false;}
-        for(const kind of ['zwart','wit']) {
-          const deltas=pots.map(p=>(pot==='all'||pot===p)?-(db.prepare('SELECT amount FROM money_balances WHERE guild=? AND kind=? AND pot=?').get(guild,kind,p)?.amount??0):0);
-          db.prepare('INSERT INTO money_transactions VALUES (?,?,?,?,?,?,?,?,?)').run(`${id}:${kind}`,guild,actor,kind,'reset',-deltas.reduce((a,b)=>a+b,0),pot==='all'?null:pot,Date.now(),JSON.stringify(deltas));
+        if(db.prepare('SELECT id FROM money_transactions WHERE id=?').get(`${id}:${kinds[0]}`)) {db.exec('COMMIT');return false;}
+        for(const moneyKind of kinds) {
+          const deltas=pots.map(p=>(pot==='all'||pot===p)?-(db.prepare('SELECT amount FROM money_balances WHERE guild=? AND kind=? AND pot=?').get(guild,moneyKind,p)?.amount??0):0);
+          db.prepare('INSERT INTO money_transactions VALUES (?,?,?,?,?,?,?,?,?)').run(`${id}:${moneyKind}`,guild,actor,moneyKind,'reset',-deltas.reduce((a,b)=>a+b,0),pot==='all'?null:pot,Date.now(),JSON.stringify(deltas));
+          if(pot==='all')db.prepare('UPDATE money_balances SET amount=0 WHERE guild=? AND kind=?').run(guild,moneyKind);
+          else db.prepare('UPDATE money_balances SET amount=0 WHERE guild=? AND pot=? AND kind=?').run(guild,pot,moneyKind);
         }
-        if(pot==='all')db.prepare('UPDATE money_balances SET amount=0 WHERE guild=?').run(guild);
-        else db.prepare('UPDATE money_balances SET amount=0 WHERE guild=? AND pot=?').run(guild,pot);
         db.exec('COMMIT');return true;
       } catch(error) {db.exec('ROLLBACK');throw error;}
     },
