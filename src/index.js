@@ -57,6 +57,7 @@ client.once(Events.ClientReady, async current => {
     store.beginAbsenceReset(guild.id,absenceResetVersion);
     store.initializeMoney(guild.id);
     store.resetMoneyOnce(guild.id);
+    store.beginMoneyLogReset(guild.id);
     ready = true;
     const refreshMoney=()=>Promise.all([
       syncMoney(guild,store).catch(error=>logError('Potjes bijwerken mislukt',error)),

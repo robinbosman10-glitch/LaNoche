@@ -121,6 +121,26 @@ const logRuns=new Map();
 export function flushMoneyLogs(guild,store) {
   if(logRuns.has(guild.id))return logRuns.get(guild.id);
   const run=(async()=>{
+    const resetKey=`money-log-reset-2026-10-27-1:${guild.id}`;
+    const reset=store.getMeta(resetKey);
+    if(reset && reset!=='done') {
+      const channel=await guild.channels.fetch(moneyLogChannel);
+      if(!channel?.messages)throw new UserError('Het geldlogkanaal ontbreekt.');
+      let before;
+      for(;;) {
+        const page=await channel.messages.fetch({limit:100,...(before?{before}:{})});
+        if(!page.size)break;
+        const next=page.last().id;
+        for(const message of page.values()) {
+          if(message.author.id!==guild.client.user.id || message.createdTimestamp>Number(reset) ||
+            !message.embeds.some(e=>e.title==='💰 LA NOCHE • GELDLOG'))continue;
+          try {await message.delete();}catch(e){if(e.code!==10008)throw e;}
+        }
+        if(page.size<100 || next===before)break;
+        before=next;
+      }
+      store.setMeta(resetKey,'done');
+    }
     const pending=store.pendingMoneyLogs(guild.id);
     if(!pending.length)return;
     const channel=await guild.channels.fetch(moneyLogChannel);

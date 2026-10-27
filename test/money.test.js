@@ -111,3 +111,16 @@ test('reset clears both money types once and preserves subsequent bookings and p
   assert.deepEqual(allocation(1000000,'wit'),[400000,600000,0]);
  }finally{s.close();rmSync(dir,{recursive:true,force:true});}
 });
+
+test('one-time log reset deletes only old bot money logs, retains balances and new logs',async t=>{
+ const s=fixture(t);s.initializeMoney('g');s.beginMoneyLogReset('g');
+ const before=s.moneyBalances('g');assert.equal(s.pendingMoneyLogs('g').length,0);
+ const cutoff=Number(s.getMeta('money-log-reset-2026-10-27-1:g'));
+ const deleted=[];const sent=[];
+ const messages=[['old','bot',cutoff-1,'💰 LA NOCHE • GELDLOG'],['other-user','human',cutoff-1,'💰 LA NOCHE • GELDLOG'],['other-embed','bot',cutoff-1,'Ticket'],['new','bot',cutoff+1,'💰 LA NOCHE • GELDLOG']].map(([id,author,createdTimestamp,title])=>({id,author:{id:author},createdTimestamp,embeds:[{title}],delete:async()=>deleted.push(id)}));
+ const {Collection}=await import('discord.js');
+ const guild={id:'g',client:{user:{id:'bot'}},channels:{fetch:async()=>({messages:{fetch:async()=>new Collection(messages.map(m=>[m.id,m]))},send:async p=>{sent.push(p);return {id:'sent'};}})}};
+ await flushMoneyLogs(guild,s);assert.deepEqual(deleted,['old']);assert.deepEqual(s.moneyBalances('g'),before);
+ s.changeMoney(event);s.beginMoneyLogReset('g');await flushMoneyLogs(guild,s);await flushMoneyLogs(guild,s);
+ assert.equal(sent.length,1);assert.deepEqual(deleted,['old']);assert.equal(s.moneyHistory('g').length,3);
+});

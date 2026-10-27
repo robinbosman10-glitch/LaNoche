@@ -22,6 +22,17 @@ export function moneyStore(db) {
     CREATE TABLE IF NOT EXISTS money_log_messages (id TEXT PRIMARY KEY,message TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS money_transactions (id TEXT PRIMARY KEY,guild TEXT,actor TEXT,kind TEXT,action TEXT,amount INTEGER,pot TEXT,time INTEGER,deltas TEXT);`);
   return {
+    beginMoneyLogReset(guild) {
+      const key=`money-log-reset-2026-10-27-1:${guild}`;
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        if(db.prepare('SELECT value FROM meta WHERE key=?').get(key)) {db.exec('COMMIT');return;}
+        // Keep the ledger and balances, but do not republish pre-reset entries.
+        db.prepare("INSERT OR IGNORE INTO money_log_messages(id,message) SELECT id,'reset' FROM money_transactions WHERE guild=?").run(guild);
+        db.prepare('INSERT INTO meta VALUES (?,?)').run(key,String(Date.now()));
+        db.exec('COMMIT');
+      } catch(error) {db.exec('ROLLBACK');throw error;}
+    },
     resetMoneyOnce(guild) {
       const key=`money-reset-2026-10-27-1:${guild}`;
       db.exec('BEGIN IMMEDIATE');
