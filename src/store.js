@@ -23,11 +23,22 @@ export function createStore(directory) {
     CREATE UNIQUE INDEX IF NOT EXISTS one_active_absence_request ON absence_requests(guild,user) WHERE status IN ('pending','approving','approved');
     CREATE TABLE IF NOT EXISTS panels (guild TEXT PRIMARY KEY, channel TEXT, message TEXT);
     CREATE TABLE IF NOT EXISTS memberlists (guild TEXT PRIMARY KEY, channel TEXT, messages TEXT);
+    CREATE TABLE IF NOT EXISTS vault_log_outbox (id TEXT PRIMARY KEY,guild TEXT,payload TEXT,message TEXT);
     CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);`);
   db.prepare('INSERT OR IGNORE INTO meta VALUES (?,?)').run('trackingStart', String(Date.now()));
   const money = moneyStore(db);
   return {
     ...money,
+    recordVault(id,guild,entry) {
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        db.prepare('INSERT OR IGNORE INTO meta VALUES (?,?)').run(id,entry.url);
+        db.prepare('INSERT OR IGNORE INTO vault_log_outbox(id,guild,payload) VALUES (?,?,?)').run(id,guild,JSON.stringify(entry));
+        db.exec('COMMIT');
+      } catch(error) {db.exec('ROLLBACK');throw error;}
+    },
+    pendingVaultLogs(guild) {return db.prepare('SELECT id,payload FROM vault_log_outbox WHERE guild=? AND message IS NULL ORDER BY rowid LIMIT 50').all(guild).map(r=>({...JSON.parse(r.payload),id:r.id}));},
+    markVaultLogged(id,message) {db.prepare('UPDATE vault_log_outbox SET message=? WHERE id=?').run(message,id);},
     getMeta(key) {return db.prepare('SELECT value FROM meta WHERE key=?').get(key)?.value;},
     setMeta(key,value) {db.prepare('INSERT OR REPLACE INTO meta VALUES (?,?)').run(key,value);},
     transcriptToken(guild,ticket) {

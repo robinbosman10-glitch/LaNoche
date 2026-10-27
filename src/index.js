@@ -1,4 +1,4 @@
-import {handleVault} from './vault.js';
+import {handleVault,flushVaultLogs} from './vault.js';
 import {handleMoney,syncMoney,flushMoneyLogs} from './money.js';
 import {syncRules} from './regels.js';
 import {syncGangInformation} from './gang-informatie.js';
@@ -61,6 +61,7 @@ client.once(Events.ClientReady, async current => {
     store.beginMoneyLogReset(guild.id);
     ready = true;
     const refreshMoney=()=>Promise.all([
+      flushVaultLogs(guild,store).catch(error=>logError('Kluislogs plaatsen mislukt',error)),
       syncMoney(guild,store).catch(error=>logError('Potjes bijwerken mislukt',error)),
       flushMoneyLogs(guild,store).catch(error=>logError('Geldlogs plaatsen mislukt',error))
     ]);

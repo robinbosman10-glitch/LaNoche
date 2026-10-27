@@ -4,7 +4,8 @@ import {createHash} from 'node:crypto';
 import {branded} from './embeds.js';
 import {parseAmount} from './money-store.js';
 import {UserError} from './logic.js';
-export const vaultChannel='1564634188278267914';
+export const vaultChannel='1561810060462661763';
+export const vaultLogChannel='1564634188278267914';
 const leadRole='1553521476378824796';
 const active=new Set();
 export function vaultPayload({action,kind,date,amount,reason,actor}) {
@@ -26,6 +27,7 @@ export function vaultInput(fields) {
 export async function handleVault(i,guildId,store) {
   const reply=content=>i.reply({content,flags:MessageFlags.Ephemeral,allowedMentions:{parse:[]}});
   if(!i.inGuild() || i.guildId!==guildId)return reply('Dit command hoort bij La Noche.');
+  if(i.channelId!==vaultChannel)return reply(`Gebruik /kluis alleen in <#${vaultChannel}>.`);
   const modal=i.isModalSubmit();
   if(modal)await i.deferReply({flags:MessageFlags.Ephemeral});
   const respond=content=>modal?i.editReply({content,allowedMentions:{parse:[]}}):reply(content);
@@ -58,14 +60,39 @@ export async function handleVault(i,guildId,store) {
     const input=vaultInput(i.fields);
     const channel=await i.guild.channels.fetch(vaultChannel);
     const send=channel?.isThread()?P.SendMessagesInThreads:P.SendMessages;
-    if(!channel?.send || !channel.permissionsFor(i.guild.members.me)?.has([P.ViewChannel,send,P.EmbedLinks,P.AttachFiles]))throw new UserError('Ik mis rechten om de kluis-embed in het kluislogkanaal te plaatsen.');
+    if(!channel?.send || !channel.permissionsFor(i.guild.members.me)?.has([P.ViewChannel,send,P.EmbedLinks,P.AttachFiles]))throw new UserError('Ik mis rechten om de kluis-embed in het kluiskanaal te plaatsen.');
     const payload=vaultPayload({...input,action,kind,actor:i.user.id});
     payload.nonce=createHash('sha256').update(key).digest('hex').slice(0,24);payload.enforceNonce=true;
     const message=await channel.send(payload);
-    store.setMeta(key,message.url);
-    return respond(`Kluisregistratie geplaatst.\n${message.url}`);
+    store.recordVault(key,i.guildId,{...input,action,kind,actor:i.user.id,url:message.url,time:Date.now()});
+    let logged=true;
+    try {await flushVaultLogs(i.guild,store);}catch(e){logged=false;console.error('Kluislog plaatsen mislukt',e.code??e.name);}
+    return respond(`Kluisregistratie geplaatst.\n${message.url}${logged?'':'\nDe aparte logmelding wordt automatisch opnieuw geprobeerd.'}`);
   } catch(e) {
     if(e instanceof UserError)return respond(e.message);
     throw e;
   } finally {active.delete(key);}
+}
+
+
+const logRuns=new Map();
+export function flushVaultLogs(guild,store) {
+  if(logRuns.has(guild.id))return logRuns.get(guild.id);
+  const run=(async()=>{
+    const pending=store.pendingVaultLogs(guild.id);
+    if(!pending.length)return;
+    const channel=await guild.channels.fetch(vaultLogChannel);
+    if(!channel?.send)throw new UserError('Het kluislogkanaal ontbreekt.');
+    for(const entry of pending) {
+      const payload=vaultPayload(entry);
+      payload.embeds[0].setTitle(entry.action==='add'?'📋 KLUISLOG • TOEGEVOEGD':'📋 KLUISLOG • VERWIJDERD')
+        .setFooter({text:'LA NOCHE • Kluislog'}).setTimestamp(entry.time)
+        .addFields({name:'Registratie',value:`[Bekijk het kluisbericht](${entry.url})`,inline:false});
+      payload.nonce=createHash('sha256').update(`log:${entry.id}`).digest('hex').slice(0,24);payload.enforceNonce=true;
+      const message=await channel.send(payload);
+      store.markVaultLogged(entry.id,message.id);
+    }
+  })();
+  logRuns.set(guild.id,run);
+  return run.finally(()=>{logRuns.delete(guild.id);});
 }
