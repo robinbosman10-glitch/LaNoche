@@ -1,3 +1,4 @@
+import {handleVault} from './vault.js';
 import {handleMoney,syncMoney,flushMoneyLogs} from './money.js';
 import {syncRules} from './regels.js';
 import {syncGangInformation} from './gang-informatie.js';
@@ -97,17 +98,19 @@ client.once(Events.ClientReady, async current => {
   } catch (error) { logError('Commands registreren mislukt; controleer GUILD_ID en de botuitnodiging', error); stop(1); }
 });
 client.on(Events.InteractionCreate, async interaction => {
+  const vault=(interaction.isChatInputCommand() && interaction.commandName==='kluis') || (interaction.isModalSubmit() && interaction.customId.startsWith('ln-vault:'));
   const money=(interaction.isChatInputCommand() && ['geld','geldreset'].includes(interaction.commandName)) || ((interaction.isButton() || interaction.isStringSelectMenu() || interaction.isModalSubmit()) && interaction.customId.startsWith('ln-money:'));
   const transcript=interaction.isButton() && interaction.customId.startsWith('ln-transcript:');
   const absence=interaction.isButton() && interaction.customId.startsWith('ln-absence:');
   const ticket = (interaction.isButton() || interaction.isStringSelectMenu()) && interaction.customId.startsWith('ln-ticket:');
-  if (!money && !transcript && !absence && !ticket && !interaction.isChatInputCommand() && !(interaction.isModalSubmit() && ['lanoche:afwezig','lanoche:zeg'].includes(interaction.customId))) return;
+  if (!vault && !money && !transcript && !absence && !ticket && !interaction.isChatInputCommand() && !(interaction.isModalSubmit() && ['lanoche:afwezig','lanoche:zeg'].includes(interaction.customId))) return;
   try {
     if (!ready) {
       await interaction.reply({ content: 'De bot start nog op. Probeer het zo opnieuw.', flags: MessageFlags.Ephemeral });
       return;
     }
-    if(money)await handleMoney(interaction,config.guildId,store);
+    if(vault)await handleVault(interaction,config.guildId,store);
+    else if(money)await handleMoney(interaction,config.guildId,store);
     else if(transcript)await handleTranscript(interaction,store);
     else if (absence) await handleAbsenceInteraction(interaction,config.guildId,store);
     else if (ticket) await handleTicketInteraction(interaction, config.guildId, store);

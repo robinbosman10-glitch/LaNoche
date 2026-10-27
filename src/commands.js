@@ -2,6 +2,7 @@ import { SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
 
 // Names and descriptions follow the supplied screenshots. Wiring comes later.
 export const definitions = [
+  ['kluis', 'Registreer geld toegevoegd aan of verwijderd uit de kluis', false, 'losstaande kluisregistratie'],
   ['geldreset', 'Zet een gekozen potje of alle potjes op nul', false, 'geldreset voor bevoegde rol'],
   ['geld', 'Beheer zwart en wit geld in de potjes', false, 'geldbeheer voor leiding'],
   ['zeg', 'Plaats tekst namens de bot in dit kanaal', true, 'tekstformulier'],
@@ -28,6 +29,10 @@ export const commands = definitions.map(command => {
     builder.addStringOption(option => option.setName('reden').setDescription('Toelichting bij deze wijziging').setMaxLength(700));
   }
   if (command.name === 'promotie') builder.addRoleOption(option => option.setName('rang').setDescription('Gewenste hogere gangrang; leeg laten voor één rang omhoog').setRequired(false));
+  if (command.name === 'kluis') {
+    builder.addStringOption(o=>o.setName('actie').setDescription('Toegevoegd of verwijderd').setRequired(true).addChoices({name:'Toegevoegd aan kluis',value:'add'},{name:'Verwijderd uit kluis',value:'remove'}));
+    builder.addStringOption(o=>o.setName('geldsoort').setDescription('Zwart of wit geld').setRequired(true).addChoices({name:'Zwart geld',value:'zwart'},{name:'Wit geld',value:'wit'}));
+  }
   if (command.name === 'warn') {
     builder.addUserOption(option => option.setName('persoon').setDescription('Het lid dat je waarschuwt').setRequired(true));
     builder.addStringOption(option => option.setName('reden').setDescription('Reden van de waarschuwing').setRequired(true).setMaxLength(700));
