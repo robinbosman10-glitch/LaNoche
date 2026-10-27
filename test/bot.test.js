@@ -6,10 +6,10 @@ import { readConfig } from '../src/config.js';
 import { handleInteraction } from '../src/handler.js';
 
 test('all commands serialize with safe default permissions', () => {
-  assert.deepEqual(commands.map(c => c.name).sort(), ['aangenomen','afwezig','demote','discordinactief','ledenlijst','ontslaan','promotie','rolaanvraag','sollistatus','ticket-panel','warn','zeg'].sort());
+  assert.deepEqual(commands.map(c => c.name).sort(), ['aangenomen','afwezig','demote','discordinactief','ledenlijst','ontslaan','promotie','rolaanvraag','sollistatus','ticket-panel','warn','zeg','geld'].sort());
   for (const command of commands) {
     assert.ok(command.description.length <= 100);
-    if (!['afwezig','rolaanvraag'].includes(command.name)) assert.equal(command.default_member_permissions, '8');
+    if (!['afwezig','rolaanvraag','geld'].includes(command.name)) assert.equal(command.default_member_permissions, '8');
   }
 });
 test('missing credentials fail before connecting', () => {

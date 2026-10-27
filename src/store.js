@@ -1,3 +1,4 @@
+import { moneyStore } from './money-store.js';
 import { randomBytes } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
@@ -24,7 +25,9 @@ export function createStore(directory) {
     CREATE TABLE IF NOT EXISTS memberlists (guild TEXT PRIMARY KEY, channel TEXT, messages TEXT);
     CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);`);
   db.prepare('INSERT OR IGNORE INTO meta VALUES (?,?)').run('trackingStart', String(Date.now()));
+  const money = moneyStore(db);
   return {
+    ...money,
     getMeta(key) {return db.prepare('SELECT value FROM meta WHERE key=?').get(key)?.value;},
     setMeta(key,value) {db.prepare('INSERT OR REPLACE INTO meta VALUES (?,?)').run(key,value);},
     transcriptToken(guild,ticket) {

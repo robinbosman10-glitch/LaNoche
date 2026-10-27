@@ -1,3 +1,4 @@
+import {handleMoney,syncMoney} from './money.js';
 import {syncRules} from './regels.js';
 import {syncGangInformation} from './gang-informatie.js';
 import {syncRadio} from './radio.js';
@@ -40,9 +41,10 @@ let ready = false;
 let refreshTimer;
 let absenceTimer;
 let auditTimer;
+let moneyTimer;
 let absenceRefreshing=false;
 let liveRefresh;
-function stop(code) { web.close(); clearInterval(refreshTimer); clearInterval(absenceTimer); clearInterval(auditTimer); liveRefresh?.stop(); client.destroy(); store.close(); process.exit(code); }
+function stop(code) { web.close(); clearInterval(moneyTimer); clearInterval(refreshTimer); clearInterval(absenceTimer); clearInterval(auditTimer); liveRefresh?.stop(); client.destroy(); store.close(); process.exit(code); }
 function logError(label, error) {
   // Do not log request bodies, headers, tokens or interaction payloads.
   console.error(`${label} (${error?.code ?? error?.name ?? 'onbekend'})`);
@@ -54,6 +56,9 @@ client.once(Events.ClientReady, async current => {
     await guild.commands.set(commands);
     store.beginAbsenceReset(guild.id,absenceResetVersion);
     ready = true;
+    const refreshMoney=()=>syncMoney(guild,store).catch(error=>logError('Potjes bijwerken mislukt',error));
+    void refreshMoney();
+    moneyTimer=setInterval(refreshMoney,60000);moneyTimer.unref();
     const sendLogs=()=>upgradeTicketLogs(guild,store).catch(error=>logError('Bestaande ticketlogs bijwerken mislukt',error)).then(()=>flushAudit(guild,store)).catch(error=>logError('Logboek bijwerken mislukt',error));
     void sendLogs();
     auditTimer=setInterval(sendLogs,15000);auditTimer.unref();
@@ -86,16 +91,18 @@ client.once(Events.ClientReady, async current => {
   } catch (error) { logError('Commands registreren mislukt; controleer GUILD_ID en de botuitnodiging', error); stop(1); }
 });
 client.on(Events.InteractionCreate, async interaction => {
+  const money=(interaction.isChatInputCommand() && interaction.commandName==='geld') || ((interaction.isButton() || interaction.isStringSelectMenu() || interaction.isModalSubmit()) && interaction.customId.startsWith('ln-money:'));
   const transcript=interaction.isButton() && interaction.customId.startsWith('ln-transcript:');
   const absence=interaction.isButton() && interaction.customId.startsWith('ln-absence:');
   const ticket = (interaction.isButton() || interaction.isStringSelectMenu()) && interaction.customId.startsWith('ln-ticket:');
-  if (!transcript && !absence && !ticket && !interaction.isChatInputCommand() && !(interaction.isModalSubmit() && ['lanoche:afwezig','lanoche:zeg'].includes(interaction.customId))) return;
+  if (!money && !transcript && !absence && !ticket && !interaction.isChatInputCommand() && !(interaction.isModalSubmit() && ['lanoche:afwezig','lanoche:zeg'].includes(interaction.customId))) return;
   try {
     if (!ready) {
       await interaction.reply({ content: 'De bot start nog op. Probeer het zo opnieuw.', flags: MessageFlags.Ephemeral });
       return;
     }
-    if(transcript)await handleTranscript(interaction,store);
+    if(money)await handleMoney(interaction,config.guildId,store);
+    else if(transcript)await handleTranscript(interaction,store);
     else if (absence) await handleAbsenceInteraction(interaction,config.guildId,store);
     else if (ticket) await handleTicketInteraction(interaction, config.guildId, store);
     else await handleInteraction(interaction, config.guildId, store);
