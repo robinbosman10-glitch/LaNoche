@@ -122,8 +122,7 @@ export async function handleBlacklist(i,guildId,store) {
     entry??={user:user.id,channels:{},status:'pending',actor:i.user.id};
    }else {entry.status='removing';entry.actor=i.user.id;save(store,i.guildId,entry);}
    await applyEntry(i.guild,store,entry,channels);
-   const managed=member && [...member.roles.cache.values()].some(r=>r.managed);
-   return respond(action==='toevoegen'?`<@${user.id}> staat op de blacklist. Blacklistrol <@&${blacklistRole}> is toegekend. Alleen Mededelingen, Server-regels en Backstory zijn zichtbaar. Verwijderbare rollen zijn afgenomen; rol <@&${blacklistKeepRole}> blijft behouden als het lid die had.${managed?' Door Discord beheerde rollen kunnen niet worden verwijderd.':''}`:`<@${user.id}> is van de blacklist gehaald. De blacklistrol en kanaalblokkades zijn verwijderd. De afgenomen rollen blijven weg.`);
+   return respond(`Perm Blacklist op <@${user.id}> ${action==='toevoegen'?'Toegevoegd':'Verwijderd'}`);
   });
  }catch(e){if(e instanceof UserError)return respond(e.message);throw e;}
 }

@@ -51,7 +51,7 @@ test('blacklist removes roles, blocks member-specific allows and removal never r
  assert.ok(f.channels.get('one').permissionOverwrites.cache.get('target').allow.has(P.ViewChannel));
  assert.equal(f.channels.get('two').permissionOverwrites.cache.has('target'),false);
  assert.ok(f.channels.get('three').permissionOverwrites.cache.get('target').deny.has(P.ViewChannel));
- assert.match(f.replies.at(-1).content,/rollen blijven weg/);
+ assert.equal(f.replies.at(-1).content,'Perm Blacklist op <@target> Verwijderd');
 }));
 test('partial block persists and retries; new channels and later roles are covered',temporary(async(store,dir)=>{
  const f=fixture();
