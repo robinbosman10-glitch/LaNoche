@@ -5,6 +5,7 @@ import {UserError} from './logic.js';
 import {parseAmount,pots,shares} from './money-store.js';
 export const moneyChannel='1563644518991925318';
 export const moneyLogChannel='1564621640271265792';
+export const moneyResetRole='1399490155194220614';
 export const moneyRole='1553521476378824796';
 const title='💰 LA NOCHE • POTJES';
 const names={gang:'🏦 Gang pot',drugs:'🌿 Drugs pot',wapens:'🔫 Wapen pot'};
@@ -62,7 +63,23 @@ function amountModal(i,kind,action,pot='all') {
   return i.showModal(new ModalBuilder().setCustomId(`ln-money:amount:${kind}:${action}:${pot}:${i.id}`).setTitle(`${action==='add'?'Toevoegen':'Verwijderen'} • ${kind} geld`)
     .addComponents(row(new TextInputBuilder().setCustomId('bedrag').setLabel('Bedrag').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(40).setPlaceholder('Bijvoorbeeld 1000000 of 1 miljoen'))));
 }
+async function handleMoneyReset(i,guildId,store) {
+  const respond=content=>i.reply({content,flags:MessageFlags.Ephemeral,allowedMentions:{parse:[]}});
+  if(!i.inGuild() || i.guildId!==guildId)return respond('Dit command hoort bij La Noche.');
+  await i.deferReply({flags:MessageFlags.Ephemeral});
+  const member=await i.guild.members.fetch({user:i.user.id,force:true});
+  if(!member.roles.cache.has(moneyResetRole))return i.editReply({content:'Alleen de aangewezen resetrol kan potjes resetten.'});
+  if(i.commandName==='geldreset')return i.editReply({content:'**Welk potje wil je resetten?**\nZwart én wit geld van je keuze gaan direct naar 0. Percentages blijven hetzelfde.',components:[row(new StringSelectMenuBuilder().setCustomId('ln-money:reset-select').setPlaceholder('Kies een potje of Alles').addOptions(...pots.map(p=>({label:names[p],value:p})),{label:'Alles',value:'all',emoji:'🔄'}))]});
+  const pot=i.values?.[0];
+  if(i.customId!=='ln-money:reset-select' || (pot!=='all' && !pots.includes(pot)))return i.editReply({content:'Kies een geldig potje via /geldreset.'});
+  const changed=store.resetMoney({guild:i.guildId,actor:i.user.id,id:`money-reset:${i.guildId}:${i.id}`,pot});
+  void flushMoneyLogs(i.guild,store).catch(e=>console.error('Resetlog plaatsen mislukt',e.code??e.name));
+  let synced=true;
+  try{await syncMoney(i.guild,store);}catch(e){synced=false;console.error('Potjes na reset bijwerken mislukt',e.code??e.name);}
+  return i.editReply({content:`${changed?`${pot==='all'?'Alle potjes':names[pot]}: zwart en wit geld staan op 0. De percentages zijn behouden.`:'Deze reset was al verwerkt.'}${synced?'':' De reset is opgeslagen; het overzicht wordt automatisch opnieuw bijgewerkt.'}`,allowedMentions:{parse:[]}});
+}
 export async function handleMoney(i,guildId,store) {
+  if(i.commandName==='geldreset' || i.customId?.startsWith('ln-money:reset'))return handleMoneyReset(i,guildId,store);
   const respond=content=>i.reply({content,flags:MessageFlags.Ephemeral,allowedMentions:{parse:[]}});
   if(!i.inGuild() || i.guildId!==guildId) return respond('Dit paneel hoort bij La Noche.');
   // Recheck the actual role on every action, including modal submission.
@@ -105,10 +122,10 @@ export function moneyLogPayload(t) {
   const added=t.action==='add';
   const deltas=JSON.parse(t.deltas);
   const payload=branded('💰 LA NOCHE • GELDLOG',
-    reset?'🔄 **ALLE SALDO’S OP NUL GEZET**':opening?'🏁 **BEGINSTAND OVERGENOMEN**':added?'🟢 **GELD TOEGEVOEGD**':'🔴 **GELD VERWIJDERD**',[
+    reset?`🔄 **${t.pot?names[t.pot].toUpperCase():'ALLE POTJES'} OP NUL GEZET**`:opening?'🏁 **BEGINSTAND OVERGENOMEN**':added?'🟢 **GELD TOEGEVOEGD**':'🔴 **GELD VERWIJDERD**',[
       field('💵 BEDRAG',format(t.amount)),
       field('💱 GELDSOORT',t.kind==='zwart'?'⚫ Zwart geld':'⚪ Wit geld'),
-      field('👤 UITGEVOERD DOOR',reset?'Eenmalige reset op verzoek van beheer':opening?'Beginstand uit bestaand overzicht':`<@${t.actor}>`),
+      field('👤 UITGEVOERD DOOR',reset && t.actor==='reset'?'Eenmalige reset op verzoek van beheer':opening?'Beginstand uit bestaand overzicht':`<@${t.actor}>`),
       field('📊 BOEKING PER POTJE',pots.map((p,i)=>`${names[p]}: **${deltas[i]<0?'−':'+'}${format(Math.abs(deltas[i]))}**`).join('\n'),false),
       field('🕒 DATUM & TIJD',`<t:${Math.floor(t.time/1000)}:F>`,false)
     ],'ticket-banner.gif','ticket-logo.gif');

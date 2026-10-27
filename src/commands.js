@@ -2,6 +2,7 @@ import { SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
 
 // Names and descriptions follow the supplied screenshots. Wiring comes later.
 export const definitions = [
+  ['geldreset', 'Zet een gekozen potje of alle potjes op nul', false, 'geldreset voor bevoegde rol'],
   ['geld', 'Beheer zwart en wit geld in de potjes', false, 'geldbeheer voor leiding'],
   ['zeg', 'Plaats tekst namens de bot in dit kanaal', true, 'tekstformulier'],
   ['warn', 'Geef een waarschuwing met optioneel een waarschuwingsrol', true, 'waarschuwing en optionele rol'],

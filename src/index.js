@@ -97,7 +97,7 @@ client.once(Events.ClientReady, async current => {
   } catch (error) { logError('Commands registreren mislukt; controleer GUILD_ID en de botuitnodiging', error); stop(1); }
 });
 client.on(Events.InteractionCreate, async interaction => {
-  const money=(interaction.isChatInputCommand() && interaction.commandName==='geld') || ((interaction.isButton() || interaction.isStringSelectMenu() || interaction.isModalSubmit()) && interaction.customId.startsWith('ln-money:'));
+  const money=(interaction.isChatInputCommand() && ['geld','geldreset'].includes(interaction.commandName)) || ((interaction.isButton() || interaction.isStringSelectMenu() || interaction.isModalSubmit()) && interaction.customId.startsWith('ln-money:'));
   const transcript=interaction.isButton() && interaction.customId.startsWith('ln-transcript:');
   const absence=interaction.isButton() && interaction.customId.startsWith('ln-absence:');
   const ticket = (interaction.isButton() || interaction.isStringSelectMenu()) && interaction.customId.startsWith('ln-ticket:');
