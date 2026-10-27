@@ -1,5 +1,5 @@
 import {randomUUID,createHash} from 'node:crypto';
-import {PermissionFlagsBits as P,OverwriteType,MessageFlags,EmbedBuilder} from 'discord.js';
+import {PermissionFlagsBits as P,OverwriteType,MessageFlags,EmbedBuilder,ContainerBuilder,TextDisplayBuilder} from 'discord.js';
 import {UserError} from './logic.js';
 export const blacklistKeepRole='1553520983628062810';
 export const blacklistRole='1564650582080364704';
@@ -161,8 +161,14 @@ export function flushBlacklistLogs(guild,store) {
 }
 
 const noticeText='Als je dit kanaal ziet betekent het dat je een Permanent Blacklist hebt ontvangen';
+const noticeHeading='# Als je dit kanaal ziet betekent het dat je een\n# PERMANENT BLACKLIST\n# hebt ontvangen';
 export function blacklistNoticePayload() {
- return {embeds:[new EmbedBuilder().setColor(0xed4245).setTitle(noticeText)],allowedMentions:{parse:[]}};
+ return {flags:MessageFlags.IsComponentsV2,components:[new ContainerBuilder().setAccentColor(0xed4245)
+  .addTextDisplayComponents(new TextDisplayBuilder().setContent(noticeHeading))],allowedMentions:{parse:[]}};
+}
+function isLargeNotice(message) {
+ const card=message.components?.[0]?.toJSON?.()??message.components?.[0];
+ return message.components?.length===1 && card?.type===17 && card.accent_color===0xed4245 && card.components?.length===1 && card.components[0].content===noticeHeading;
 }
 const noticeRuns=new Map();
 export function syncBlacklistNotice(guild,store) {
@@ -178,15 +184,14 @@ export function syncBlacklistNotice(guild,store) {
    let before;
    for(;;) {
     const page=await channel.messages.fetch({limit:100,...(before?{before}:{})});
-    message=[...page.values()].find(m=>m.author.id===guild.client.user.id && m.embeds.some(e=>e.title===noticeText));
+    message=[...page.values()].find(m=>m.author.id===guild.client.user.id && (m.embeds.some(e=>e.title===noticeText) || isLargeNotice(m)));
     if(message || page.size<100)break;
     before=page.last().id;
    }
   }
   const payload=blacklistNoticePayload();
   if(message) {
-   const embed=message.embeds[0];
-   if(message.embeds.length!==1 || embed?.title!==noticeText || embed?.color!==0xed4245 || embed?.image || embed?.thumbnail || embed?.description)await message.edit({...payload,attachments:[]});
+   if(!isLargeNotice(message))await message.edit({...payload,content:null,embeds:[],attachments:[]});
   }else message=await channel.send(payload);
   store.setMeta(metaKey,message.id);
  })();noticeRuns.set(guild.id,run);

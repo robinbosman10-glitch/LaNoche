@@ -128,11 +128,11 @@ test('logs queue only completed changes and retry after restart without repeatin
 
 test('notice uses exact title without images and reuses the saved or recovered message',temporary(async store=>{
  const title='Als je dit kanaal ziet betekent het dat je een Permanent Blacklist hebt ontvangen';
- const payload=blacklistNoticePayload();assert.equal(payload.embeds[0].toJSON().title,title);assert.equal(payload.embeds[0].toJSON().image,undefined);assert.equal(payload.files,undefined);
+ const payload=blacklistNoticePayload();assert.equal(payload.flags,32768);assert.match(payload.components[0].toJSON().components[0].content,/# PERMANENT BLACKLIST/);assert.equal(payload.embeds,undefined);assert.equal(payload.files,undefined);
  assert.ok(blacklistVisibleChannels.has(blacklistNoticeChannel));
  let sends=0;const messages=new Collection();
  const channel={messages:{fetch:async input=>typeof input==='string'?messages.get(input):messages},send:async p=>{
-  sends++;const message={id:'notice',author:{id:'bot'},embeds:p.embeds.map(e=>e.toJSON()),edit:async()=>assert.fail('unchanged notice should not be edited')};messages.set(message.id,message);return message;
+  sends++;const message={id:'notice',author:{id:'bot'},embeds:[],components:p.components.map(c=>c.toJSON()),edit:async()=>assert.fail('unchanged notice should not be edited')};messages.set(message.id,message);return message;
  }};
  const guild={id:'g',client:{user:{id:'bot'}},channels:{fetch:async id=>{assert.equal(id,blacklistNoticeChannel);return channel;}}};
  await syncBlacklistNotice(guild,store);await syncBlacklistNotice(guild,store);assert.equal(sends,1);
@@ -144,4 +144,14 @@ test('blacklist role is configured for the notice even before the first blacklis
  assert.ok(f.channels.get(blacklistNoticeChannel).permissionOverwrites.cache.get(blacklistRole).allow.has(P.ViewChannel));
  assert.ok(f.channels.get('one').permissionOverwrites.cache.get(blacklistRole).deny.has(P.ViewChannel));
  assert.equal(f.removed(),0);
+}));
+
+
+test('old small notice is converted in place to a large text container',temporary(async store=>{
+ let edited;const message={id:'old',author:{id:'bot'},embeds:[{title:'Als je dit kanaal ziet betekent het dat je een Permanent Blacklist hebt ontvangen'}],components:[],edit:async payload=>{edited=payload;}};
+ store.setMeta('blacklist-notice:g','old');
+ const guild={id:'g',client:{user:{id:'bot'}},channels:{fetch:async()=>({messages:{fetch:async()=>message},send:async()=>assert.fail('must update existing notice')})}};
+ await syncBlacklistNotice(guild,store);
+ assert.equal(edited.flags,32768);assert.deepEqual(edited.embeds,[]);assert.equal(edited.content,null);assert.deepEqual(edited.attachments,[]);
+ assert.match(edited.components[0].toJSON().components[0].content,/# PERMANENT BLACKLIST/);
 }));
