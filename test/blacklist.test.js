@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {Collection,PermissionsBitField,PermissionFlagsBits as P} from 'discord.js';
 import {createStore} from '../src/store.js';
-import {handleBlacklist,syncBlacklist,blacklistKeepRole,blacklistRole,blacklistVisibleChannels,blacklistLogPayload,flushBlacklistLogs,blacklistLogChannel} from '../src/blacklist.js';
+import {handleBlacklist,syncBlacklist,blacklistKeepRole,blacklistRole,blacklistVisibleChannels,blacklistLogPayload,flushBlacklistLogs,blacklistLogChannel,blacklistNoticeChannel,blacklistNoticePayload,syncBlacklistNotice} from '../src/blacklist.js';
 const permissions=bits=>new PermissionsBitField(bits);
 function fixture() {
  const role=(id,position,bits=0n)=>({id,position,editable:true,managed:false,permissions:permissions(bits),comparePositionTo:other=>position-other.position});
@@ -124,4 +124,24 @@ test('logs queue only completed changes and retry after restart without repeatin
   fail=false;await flushBlacklistLogs(guild,reopened);await flushBlacklistLogs(guild,reopened);
   assert.equal(sent.length,2);assert.equal(reopened.pendingBlacklistLogs('g').length,0);
  }finally{reopened.close();}
+}));
+
+test('notice uses exact title without images and reuses the saved or recovered message',temporary(async store=>{
+ const title='Als je dit kanaal ziet betekent het dat je een Permanent Blacklist hebt ontvangen';
+ const payload=blacklistNoticePayload();assert.equal(payload.embeds[0].toJSON().title,title);assert.equal(payload.embeds[0].toJSON().image,undefined);assert.equal(payload.files,undefined);
+ assert.ok(blacklistVisibleChannels.has(blacklistNoticeChannel));
+ let sends=0;const messages=new Collection();
+ const channel={messages:{fetch:async input=>typeof input==='string'?messages.get(input):messages},send:async p=>{
+  sends++;const message={id:'notice',author:{id:'bot'},embeds:p.embeds.map(e=>e.toJSON()),edit:async()=>assert.fail('unchanged notice should not be edited')};messages.set(message.id,message);return message;
+ }};
+ const guild={id:'g',client:{user:{id:'bot'}},channels:{fetch:async id=>{assert.equal(id,blacklistNoticeChannel);return channel;}}};
+ await syncBlacklistNotice(guild,store);await syncBlacklistNotice(guild,store);assert.equal(sends,1);
+ store.setMeta('blacklist-notice:g','');await syncBlacklistNotice(guild,store);assert.equal(sends,1);assert.equal(store.getMeta('blacklist-notice:g'),'notice');
+}));
+
+test('blacklist role is configured for the notice even before the first blacklist',temporary(async store=>{
+ const f=fixture();await syncBlacklist(f.guild,store);
+ assert.ok(f.channels.get(blacklistNoticeChannel).permissionOverwrites.cache.get(blacklistRole).allow.has(P.ViewChannel));
+ assert.ok(f.channels.get('one').permissionOverwrites.cache.get(blacklistRole).deny.has(P.ViewChannel));
+ assert.equal(f.removed(),0);
 }));

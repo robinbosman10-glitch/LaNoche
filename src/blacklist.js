@@ -3,7 +3,8 @@ import {PermissionFlagsBits as P,OverwriteType,MessageFlags,EmbedBuilder} from '
 import {UserError} from './logic.js';
 export const blacklistKeepRole='1553520983628062810';
 export const blacklistRole='1564650582080364704';
-export const blacklistVisibleChannels=new Set(['1553516146773463162','1374423843007103097','1553516237462704229']);
+export const blacklistNoticeChannel='1564657779686379571';
+export const blacklistVisibleChannels=new Set([blacklistNoticeChannel,'1553516146773463162','1374423843007103097','1553516237462704229']);
 export const blacklistLogChannel='1564654956185780234';
 const runs=new Map();
 function exclusive(guild,fn) {
@@ -23,7 +24,7 @@ function checkBlacklistRole(guild,channels) {
  const role=guild.roles.cache.get(blacklistRole);
  if(!role || role.managed || !role.editable)throw new UserError('De blacklistrol ontbreekt of staat boven mijn botrol. Zet mijn botrol boven de blacklistrol.');
  if(role.permissions.has(P.Administrator))throw new UserError('De blacklistrol mag geen Administrator hebben.');
- if([...blacklistVisibleChannels].some(id=>!channels.some(c=>c.id===id)))throw new UserError('Een van de drie toegestane blacklistkanalen ontbreekt. Controleer de kanaal-ID’s en mijn toegang.');
+ if([...blacklistVisibleChannels].some(id=>!channels.some(c=>c.id===id)))throw new UserError('Een van de toegestane blacklistkanalen ontbreekt. Controleer de kanaal-ID’s en mijn toegang.');
 }
 async function syncBlacklistRole(guild,channels) {
  checkBlacklistRole(guild,channels);
@@ -31,7 +32,7 @@ async function syncBlacklistRole(guild,channels) {
  for(const channel of channels) {
   const visible=blacklistVisibleChannels.has(channel.id);
   if(viewState(channel.permissionOverwrites.cache.get(blacklistRole))===visible)continue;
-  try{await channel.permissionOverwrites.edit(blacklistRole,{ViewChannel:visible},{type:OverwriteType.Role,reason:'Blacklist: alleen mededelingen, server-regels en backstory zichtbaar'});}catch{failed.push(channel.id);}
+  try{await channel.permissionOverwrites.edit(blacklistRole,{ViewChannel:visible},{type:OverwriteType.Role,reason:'Blacklist: alleen informatiekanalen en blacklistmelding zichtbaar'});}catch{failed.push(channel.id);}
  }
  if(failed.length)throw new UserError(`De blacklistrol kon in ${failed.length} kanaal/kanalen nog niet worden ingesteld. Controleer mijn kanaalrechten en probeer opnieuw.`);
 }
@@ -90,10 +91,11 @@ async function applyEntry(guild,store,entry,channels) {
 export function syncBlacklist(guild,store) {
  if(runs.has(guild.id))return runs.get(guild.id);
  return exclusive(guild.id,async()=>{
-  const entries=store.blacklistEntries(guild.id);if(!entries.length)return;
+  const entries=store.blacklistEntries(guild.id);
   await guild.roles.fetch();const channels=await channelsFor(guild);const errors=[];
   let roleError;
-  if(entries.some(e=>e.status!=='removing'))try{await syncBlacklistRole(guild,channels);}catch(e){roleError=e;}
+  try{await syncBlacklistRole(guild,channels);}catch(e){roleError=e;}
+  if(!entries.length && roleError)throw roleError;
   for(const entry of entries)try{if(roleError && entry.status!=='removing')throw roleError;await applyEntry(guild,store,entry,channels);}catch(e){errors.push(e);}
   if(errors.length)throw errors[0];
  });
@@ -156,4 +158,37 @@ export function flushBlacklistLogs(guild,store) {
   }
  })();logRuns.set(guild.id,run);
  return run.finally(()=>logRuns.delete(guild.id));
+}
+
+const noticeText='Als je dit kanaal ziet betekent het dat je een Permanent Blacklist hebt ontvangen';
+export function blacklistNoticePayload() {
+ return {embeds:[new EmbedBuilder().setColor(0xed4245).setTitle(noticeText)],allowedMentions:{parse:[]}};
+}
+const noticeRuns=new Map();
+export function syncBlacklistNotice(guild,store) {
+ if(noticeRuns.has(guild.id))return noticeRuns.get(guild.id);
+ const run=(async()=>{
+  const channel=await guild.channels.fetch(blacklistNoticeChannel);
+  if(!channel?.send)throw new UserError('Het blacklistmeldingskanaal ontbreekt.');
+  const metaKey=`blacklist-notice:${guild.id}`;const saved=store.getMeta(metaKey);
+  let message;
+  if(saved)try{message=await channel.messages.fetch(saved);}catch(e){if(e.code!==10008)throw e;}
+  if(message && message.author.id!==guild.client.user.id)message=null;
+  if(!message) {
+   let before;
+   for(;;) {
+    const page=await channel.messages.fetch({limit:100,...(before?{before}:{})});
+    message=[...page.values()].find(m=>m.author.id===guild.client.user.id && m.embeds.some(e=>e.title===noticeText));
+    if(message || page.size<100)break;
+    before=page.last().id;
+   }
+  }
+  const payload=blacklistNoticePayload();
+  if(message) {
+   const embed=message.embeds[0];
+   if(message.embeds.length!==1 || embed?.title!==noticeText || embed?.color!==0xed4245 || embed?.image || embed?.thumbnail || embed?.description)await message.edit({...payload,attachments:[]});
+  }else message=await channel.send(payload);
+  store.setMeta(metaKey,message.id);
+ })();noticeRuns.set(guild.id,run);
+ return run.finally(()=>noticeRuns.delete(guild.id));
 }
