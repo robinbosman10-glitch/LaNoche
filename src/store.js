@@ -1,3 +1,4 @@
+import {vaultStore} from './vault-store.js';
 import { moneyStore } from './money-store.js';
 import { randomBytes } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
@@ -29,9 +30,11 @@ export function createStore(directory) {
   const money = moneyStore(db);
   return {
     ...money,
+    ...vaultStore(db),
     recordVault(id,guild,entry) {
       db.exec('BEGIN IMMEDIATE');
       try {
+        db.prepare('UPDATE vault_bookings SET url=? WHERE id=?').run(entry.url,id);
         db.prepare('INSERT OR IGNORE INTO meta VALUES (?,?)').run(id,entry.url);
         db.prepare('INSERT OR IGNORE INTO vault_log_outbox(id,guild,payload) VALUES (?,?,?)').run(id,guild,JSON.stringify(entry));
         db.exec('COMMIT');
