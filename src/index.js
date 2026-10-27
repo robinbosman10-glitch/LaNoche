@@ -1,4 +1,4 @@
-import {handleBlacklist,syncBlacklist} from './blacklist.js';
+import {handleBlacklist,syncBlacklist,flushBlacklistLogs} from './blacklist.js';
 import {handleVault,flushVaultLogs,flushVaultPosts,syncVault} from './vault.js';
 import {handleMoney,syncMoney,flushMoneyLogs} from './money.js';
 import {syncRules} from './regels.js';
@@ -63,7 +63,7 @@ client.once(Events.ClientReady, async current => {
     store.initializeVault(guild.id);
     ready = true;
     const refreshMoney=()=>Promise.all([
-      syncBlacklist(guild,store).catch(error=>logError('Blacklist bijwerken mislukt',error)),
+      syncBlacklist(guild,store).catch(error=>logError('Blacklist bijwerken mislukt',error)).then(()=>flushBlacklistLogs(guild,store)).catch(error=>logError('Blacklistlogs plaatsen mislukt',error)),
       flushVaultPosts(guild,store).then(()=>flushVaultLogs(guild,store)).catch(error=>logError('Kluisberichten plaatsen mislukt',error)),
       syncVault(guild,store).catch(error=>logError('Kluisoverzicht bijwerken mislukt',error)),
       syncMoney(guild,store).catch(error=>logError('Potjes bijwerken mislukt',error)),

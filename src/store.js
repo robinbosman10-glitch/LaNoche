@@ -24,6 +24,7 @@ export function createStore(directory) {
     CREATE UNIQUE INDEX IF NOT EXISTS one_active_absence_request ON absence_requests(guild,user) WHERE status IN ('pending','approving','approved');
     CREATE TABLE IF NOT EXISTS panels (guild TEXT PRIMARY KEY, channel TEXT, message TEXT);
     CREATE TABLE IF NOT EXISTS memberlists (guild TEXT PRIMARY KEY, channel TEXT, messages TEXT);
+    CREATE TABLE IF NOT EXISTS blacklist_logs (id TEXT PRIMARY KEY,guild TEXT,payload TEXT,message TEXT);
     CREATE TABLE IF NOT EXISTS vault_log_outbox (id TEXT PRIMARY KEY,guild TEXT,payload TEXT,message TEXT);
     CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);`);
   db.prepare('INSERT OR IGNORE INTO meta VALUES (?,?)').run('trackingStart', String(Date.now()));
@@ -42,6 +43,16 @@ export function createStore(directory) {
     },
     pendingVaultLogs(guild) {return db.prepare('SELECT id,payload FROM vault_log_outbox WHERE guild=? AND message IS NULL ORDER BY rowid LIMIT 50').all(guild).map(r=>({...JSON.parse(r.payload),id:r.id}));},
     markVaultLogged(id,message) {db.prepare('UPDATE vault_log_outbox SET message=? WHERE id=?').run(message,id);},
+    finishBlacklist(guild,user,entry,event) {
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        db.prepare('INSERT OR REPLACE INTO meta VALUES (?,?)').run(`blacklist:${guild}:${user}`,JSON.stringify(entry));
+        if(event)db.prepare('INSERT OR IGNORE INTO blacklist_logs(id,guild,payload) VALUES (?,?,?)').run(event.id,guild,JSON.stringify(event));
+        db.exec('COMMIT');
+      }catch(e){db.exec('ROLLBACK');throw e;}
+    },
+    pendingBlacklistLogs(guild) {return db.prepare('SELECT payload FROM blacklist_logs WHERE guild=? AND message IS NULL ORDER BY rowid LIMIT 50').all(guild).map(r=>JSON.parse(r.payload));},
+    markBlacklistLogged(id,message) {db.prepare('UPDATE blacklist_logs SET message=? WHERE id=?').run(message,id);},
     blacklistEntries(guild) {return db.prepare('SELECT value FROM meta WHERE key LIKE ?').all(`blacklist:${guild}:%`).map(r=>JSON.parse(r.value)).filter(Boolean);},
     getMeta(key) {return db.prepare('SELECT value FROM meta WHERE key=?').get(key)?.value;},
     setMeta(key,value) {db.prepare('INSERT OR REPLACE INTO meta VALUES (?,?)').run(key,value);},

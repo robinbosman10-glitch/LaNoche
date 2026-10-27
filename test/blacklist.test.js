@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {Collection,PermissionsBitField,PermissionFlagsBits as P} from 'discord.js';
 import {createStore} from '../src/store.js';
-import {handleBlacklist,syncBlacklist,blacklistKeepRole,blacklistRole,blacklistVisibleChannels} from '../src/blacklist.js';
+import {handleBlacklist,syncBlacklist,blacklistKeepRole,blacklistRole,blacklistVisibleChannels,blacklistLogPayload,flushBlacklistLogs,blacklistLogChannel} from '../src/blacklist.js';
 const permissions=bits=>new PermissionsBitField(bits);
 function fixture() {
  const role=(id,position,bits=0n)=>({id,position,editable:true,managed:false,permissions:permissions(bits),comparePositionTo:other=>position-other.position});
@@ -101,4 +101,27 @@ test('missing exception channels or an Administrator blacklist role stop additio
  await handleBlacklist(f.i,'g',store);assert.match(f.replies.at(-1).content,/ontbreekt/);assert.equal(f.removed(),0);
  f.channels.set(id,channel);f.guild.roles.cache.get(blacklistRole).permissions=permissions(P.Administrator);
  await handleBlacklist(f.i,'g',store);assert.match(f.replies.at(-1).content,/Administrator/);assert.equal(f.removed(),0);
+}));
+
+test('compact logs contain actor and target, without banner or attachments',()=>{
+ for(const action of ['toevoegen','verwijderen']) {
+  const payload=blacklistLogPayload({action,user:'target',actor:'actor',time:1000});const embed=payload.embeds[0].toJSON();
+  assert.match(embed.title,action==='toevoegen'?/Toegevoegd/:/Verwijderd/);
+  assert.match(embed.description,/<@target>/);assert.match(embed.description,/<@actor>/);
+  assert.equal(embed.image,undefined);assert.equal(payload.files,undefined);assert.deepEqual(payload.allowedMentions,{parse:[]});
+ }
+});
+
+test('logs queue only completed changes and retry after restart without repeating deliveries',temporary(async(store,dir)=>{
+ const f=fixture();await handleBlacklist(f.i,'g',store);await handleBlacklist(f.i,'g',store);
+ assert.equal(store.pendingBlacklistLogs('g').length,1);
+ f.setAction('verwijderen');await handleBlacklist(f.i,'g',store);
+ assert.deepEqual(store.pendingBlacklistLogs('g').map(e=>e.action),['toevoegen','verwijderen']);
+ const reopened=createStore(dir);const sent=[];let fail=true;
+ const guild={id:'g',channels:{fetch:async id=>{assert.equal(id,blacklistLogChannel);return {send:async p=>{if(fail)throw new Error('offline');sent.push(p);return {id:String(sent.length)};}};}}};
+ try {
+  await assert.rejects(flushBlacklistLogs(guild,reopened),/offline/);assert.equal(reopened.pendingBlacklistLogs('g').length,2);
+  fail=false;await flushBlacklistLogs(guild,reopened);await flushBlacklistLogs(guild,reopened);
+  assert.equal(sent.length,2);assert.equal(reopened.pendingBlacklistLogs('g').length,0);
+ }finally{reopened.close();}
 }));

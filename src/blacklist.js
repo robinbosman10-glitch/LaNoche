@@ -1,8 +1,10 @@
-import {PermissionFlagsBits as P,OverwriteType,MessageFlags} from 'discord.js';
+import {randomUUID,createHash} from 'node:crypto';
+import {PermissionFlagsBits as P,OverwriteType,MessageFlags,EmbedBuilder} from 'discord.js';
 import {UserError} from './logic.js';
 export const blacklistKeepRole='1553520983628062810';
 export const blacklistRole='1564650582080364704';
 export const blacklistVisibleChannels=new Set(['1553516146773463162','1374423843007103097','1553516237462704229']);
+export const blacklistLogChannel='1564654956185780234';
 const runs=new Map();
 function exclusive(guild,fn) {
  const previous=runs.get(guild)??Promise.resolve();
@@ -59,7 +61,7 @@ async function applyEntry(guild,store,entry,channels) {
    }
   }
   if(member?.roles.cache.has(blacklistRole))await member.roles.remove(blacklistRole,reason);
-  store.setMeta(key(guild.id,entry.user),'null');return;
+  store.finishBlacklist(guild.id,entry.user,null,entry.event);return;
  }
  // Capture every original overwrite before category edits propagate to children.
  for(const channel of channels)if(!Object.hasOwn(entry.channels,channel.id)) {
@@ -82,7 +84,8 @@ async function applyEntry(guild,store,entry,channels) {
  }
  if(member?.voice?.channelId)await member.voice.disconnect(reason);
  if(failed.length)throw new UserError(`Blacklist opgeslagen, maar ${failed.length} kanaalblokkade(s) zijn nog niet gelukt. Controleer mijn kanaalrechten; de bot probeert dit automatisch opnieuw.`);
- entry.status='active';save(store,guild.id,entry);
+ entry.status='active';const event=entry.event;delete entry.event;
+ store.finishBlacklist(guild.id,entry.user,entry,event);
 }
 export function syncBlacklist(guild,store) {
  if(runs.has(guild.id))return runs.get(guild.id);
@@ -119,10 +122,38 @@ export async function handleBlacklist(i,guildId,store) {
     if(member.voice?.channelId && !member.voice.channel.permissionsFor(i.guild.members.me)?.has(P.MoveMembers))throw new UserError('Ik mis Leden verplaatsen om dit lid uit het spraakkanaal te halen.');
     if(channels.some(c=>!c.permissionsFor(i.guild.members.me)?.has([P.ViewChannel,P.ManageRoles])))throw new UserError('Ik moet alle kanalen kunnen bekijken en daar kanaalrechten kunnen beheren. Controleer mijn rechten voordat je de blacklist toepast.');
     await syncBlacklistRole(i.guild,channels);
-    entry??={user:user.id,channels:{},status:'pending',actor:i.user.id};
-   }else {entry.status='removing';entry.actor=i.user.id;save(store,i.guildId,entry);}
+    entry??={user:user.id,channels:{},status:'pending',actor:i.user.id,event:{id:i.id??randomUUID(),user:user.id,actor:i.user.id,action,time:Date.now()}};
+   }else {
+    if(entry.status!=='removing')entry.event={id:i.id??randomUUID(),user:user.id,actor:i.user.id,action,time:Date.now()};
+    entry.status='removing';entry.actor=i.user.id;save(store,i.guildId,entry);
+   }
    await applyEntry(i.guild,store,entry,channels);
+   await flushBlacklistLogs(i.guild,store).catch(e=>console.error('Blacklistlog plaatsen mislukt',e.code??e.name));
    return respond(`Perm Blacklist op <@${user.id}> ${action==='toevoegen'?'Toegevoegd':'Verwijderd'}`);
   });
  }catch(e){if(e instanceof UserError)return respond(e.message);throw e;}
+}
+
+export function blacklistLogPayload(event) {
+ const added=event.action==='toevoegen';
+ return {embeds:[new EmbedBuilder().setColor(added?0xed4245:0x57f287)
+  .setTitle('Perm Blacklist • '+(added?'Toegevoegd':'Verwijderd'))
+  .setDescription(`**Persoon:** <@${event.user}>\n**Door:** <@${event.actor}>`)
+  .setTimestamp(event.time)],allowedMentions:{parse:[]}};
+}
+const logRuns=new Map();
+export function flushBlacklistLogs(guild,store) {
+ if(logRuns.has(guild.id))return logRuns.get(guild.id);
+ const run=(async()=>{
+  const pending=store.pendingBlacklistLogs(guild.id);if(!pending.length)return;
+  const channel=await guild.channels.fetch(blacklistLogChannel);
+  if(!channel?.send)throw new UserError('Het blacklistlogkanaal ontbreekt.');
+  for(const event of pending) {
+   const payload=blacklistLogPayload(event);
+   payload.nonce=createHash('sha256').update(`blacklist-log:${event.id}`).digest('hex').slice(0,24);payload.enforceNonce=true;
+   const message=await channel.send(payload);
+   store.markBlacklistLogged(event.id,message.id);
+  }
+ })();logRuns.set(guild.id,run);
+ return run.finally(()=>logRuns.delete(guild.id));
 }
