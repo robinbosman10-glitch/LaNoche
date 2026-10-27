@@ -67,7 +67,7 @@ test('opening stock is exact, once only and persists; atomic withdrawals and ali
   assert.deepEqual(store.moneyBalances('g'),[]);
   const embed=vaultOverviewPayload(store,'g').embeds[0].toJSON();
   assert.equal(embed.image.url,'attachment://ticket-banner.gif');
-  assert.match(embed.fields.find(f=>f.name.includes('WAPENS')).value,/4×.*pistol/);
+  assert.match(embed.fields.find(f=>f.name.includes('WAPENS')).value,/Pistol\s+4/);
   assert.doesNotMatch(embed.fields.find(f=>f.name.includes('WAPENS')).value,/mes/);
  }finally{store.close();rmSync(dir,{recursive:true,force:true});}
 });

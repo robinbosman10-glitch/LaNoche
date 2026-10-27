@@ -122,29 +122,41 @@ export function flushVaultPosts(guild,store) {
  return run.finally(()=>postRuns.delete(guild.id));
 }
 const overviewTitle='🏦 LA NOCHE • KLUIS';
+// Full-width, aligned blocks keep names and quantities together on mobile too.
+function inventoryFields(title,entries) {
+ if(!entries.length)return [{name:title,value:'```text\nGeen voorraad\n```',inline:false}];
+ const rows=entries.map(b=>({
+  name:(b.item.charAt(0).toUpperCase()+b.item.slice(1)).replace(/`/g,"'").replace(/[\r\n\t]/g,' '),
+  amount:b.amount.toLocaleString('nl-NL')
+ }));
+ const width=Math.max(18,...rows.map(r=>r.name.length));
+ const amountWidth=Math.max(6,...rows.map(r=>r.amount.length));
+ const header='Voorwerp'.padEnd(width)+'  '+'Aantal'.padStart(amountWidth);
+ const fields=[];let lines=[];
+ const add=()=>fields.push({name:title+(fields.length?' • vervolg':''),value:'```text\n'+header+'\n\n'+lines.join('\n')+'\n```',inline:false});
+ for(const row of rows) {
+  const line=row.name.padEnd(width)+'  '+row.amount.padStart(amountWidth);
+  if(header.length+lines.join('\n').length+line.length+20>1000){add();lines=[];}
+  lines.push(line);
+ }
+ add();return fields;
+}
 export function vaultOverviewPayload(store,guild) {
  const balances=store.vaultBalances(guild);
  const money=kind=>balances.find(b=>b.kind===kind)?.amount??0;
- const currency=value=>`**$ ${value.toLocaleString('nl-NL')}**`;
- const fields=[
-  {name:'⚪  WIT GELD',value:currency(money('wit')),inline:true},
-  {name:'⚫  ZWART GELD',value:currency(money('zwart')),inline:true},
-  {name:'💰  TOTAAL GELD',value:currency(money('wit')+money('zwart')),inline:true}
- ];
- for(const [kind,title,inline] of [['wapen','🔫  WAPENS',true],['munitie','📦  MUNITIE',true],['voorraad','🌿  OVERIGE VOORRAAD',false]]) {
-  const lines=balances.filter(b=>b.kind===kind && b.amount>0)
-   .sort((a,b)=>a.item.localeCompare(b.item,'nl'))
-   .map(b=>`**${b.amount.toLocaleString('nl-NL')}×** ${escapeMarkdown(b.item)}`);
-  let block='';let part=0;
-  for(const line of lines) {
-   if(block.length+line.length+2>1000){fields.push({name:title+(part++?' • vervolg':''),value:block,inline});block='';}
-   block+=(block?'\n\n':'')+line;
-  }
-  fields.push({name:title+(part?' • vervolg':''),value:block||'*Niet op voorraad*',inline});
+ const currency=value=>'$ '+value.toLocaleString('nl-NL');
+ const wit=currency(money('wit')),zwart=currency(money('zwart'));
+ const moneyWidth=Math.max(wit.length,zwart.length);
+ const fields=[{name:'💰  GELD IN DE KLUIS',value:'```text\n'+
+  'Wit geld'.padEnd(12)+wit.padStart(moneyWidth)+'\n'+
+  'Zwart geld'.padEnd(12)+zwart.padStart(moneyWidth)+'\n```',inline:false}];
+ for(const [kind,title] of [['wapen','🔫  WAPENS'],['munitie','📦  MUNITIE'],['voorraad','🌿  OVERIGE VOORRAAD']]) {
+  fields.push(...inventoryFields(title,balances.filter(b=>b.kind===kind && b.amount>0)
+   .sort((a,b)=>a.item.localeCompare(b.item,'nl'))));
  }
- const payload=branded(overviewTitle,'**ACTUELE KLUISINHOUD**\nFinancieel saldo en beschikbare voorraad.',fields,'ticket-banner.gif','ticket-logo.gif');
+ const payload=branded(overviewTitle,`TOTAAL GELD IN KLUIS\n**${currency(money('wit')+money('zwart'))}**`,fields,'ticket-banner.gif','ticket-logo.gif');
  payload.embeds[0].setAuthor({name:'LA NOCHE • KLUISBEHEER',iconURL:'attachment://ticket-logo.gif'})
-  .setFooter({text:'Automatisch bijgewerkt • Laatste controle'});
+  .setFooter({text:'Live voorraad • Automatisch bijgewerkt'});
  return payload;
 }
 const overviewRuns=new Map();
