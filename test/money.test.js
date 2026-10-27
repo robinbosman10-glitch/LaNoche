@@ -58,7 +58,7 @@ test('failed dashboard update does not lose or duplicate a saved booking',async 
  i.fields={getTextInputValue:()=> '1 miljoen'};i.guild.channels={fetch:async()=>{throw new Error('offline');}};
  await handleMoney(i,'g',s);assert.match(i.replies.at(-1).content,/opgeslagen/);
  await handleMoney(i,'g',s);assert.equal(s.moneyHistory('g').length,1);assert.match(i.replies.at(-1).content,/al verwerkt/);
- const payload=moneyPayload(s,'g');assert.equal(payload.embeds[0].toJSON().fields.length,4);assert.equal(payload.files.length,2);
+ const payload=moneyPayload(s,'g');assert.equal(payload.embeds[0].toJSON().fields.length,3);assert.equal(payload.files.length,2);
 });
 test('dashboard edits existing message after reload instead of sending duplicates',async t=>{
  const s=fixture(t);let sends=0,edits=0;const message={id:'panel',attachments:[],edit:async()=>{edits++;}};
@@ -79,7 +79,7 @@ test('historical opening balances are exact and imported once across restarts',(
   s.close();s=createStore(dir);assert.equal(s.initializeMoney('g'),false);
   assert.deepEqual(Object.fromEntries(s.moneyBalances('g').map(b=>[`${b.kind}:${b.pot}`,b.amount])),values);
   const fields=moneyPayload(s,'g').embeds[0].toJSON().fields;
-  assert.equal(fields.length,4);assert.ok(fields.every(f=>!f.name.includes('BOEKING')));
+  assert.equal(fields.length,3);assert.ok(fields.every(f=>!f.name.includes('BOEKING')));
  } finally{s.close();rmSync(dir,{recursive:true,force:true});}
 });
 

@@ -14,9 +14,13 @@ const syncs=new Map();
 export function moneyPayload(store,guild) {
   const balances=store.moneyBalances(guild);
   const balance=(kind,pot)=>balances.find(b=>b.kind===kind && b.pot===pot)?.amount??0;
-  const fields=pots.map((pot,i)=>field(names[pot],`⚫ **Zwart:** ${format(balance('zwart',pot))} · ${shares.zwart[i]}%\n⚪ **Wit:** ${format(balance('wit',pot))} · ${shares.wit[i]}%`,false));
-  fields.push(field('💎 TOTAAL',`⚫ ${format(pots.reduce((n,p)=>n+balance('zwart',p),0))}\n⚪ ${format(pots.reduce((n,p)=>n+balance('wit',p),0))}`,false));
-  const payload=branded(title,'**Elke bijdrage op de juiste plek.**\nToevoegingen worden automatisch verdeeld. Uitgaven gaan uit één gekozen potje.\nGebruik **/geld** om een boeking te doen.',fields,'ticket-banner.gif','ticket-logo.gif');
+  const fields=['zwart','wit'].map(kind=>field(kind==='zwart'?'⚫ ZWART GELD':'⚪ WIT GELD',
+    pots.map(pot=>`${names[pot]}\n**${format(balance(kind,pot))}**`).join('\n\n')+
+    `\n\n**TOTAAL ${kind.toUpperCase()}**\n**${format(pots.reduce((n,p)=>n+balance(kind,p),0))}**`,true));
+  fields.push(field('📊 VERDELING BIJ TOEVOEGEN',
+    `**Zwart** · Gang ${shares.zwart[0]}% · Drugs ${shares.zwart[1]}% · Wapens ${shares.zwart[2]}%\n**Wit** · Gang ${shares.wit[0]}% · Drugs ${shares.wit[1]}% · Wapens ${shares.wit[2]}%`,false));
+  const payload=branded(title,'Alle saldo’s op één plek. Beheer de potjes via de knop hieronder of **/geld**.',fields,'ticket-banner.gif','ticket-logo.gif');
+  payload.embeds[0].setFooter({text:'LA NOCHE • Automatisch bijgewerkt'});
   payload.components=[row(new ButtonBuilder().setCustomId('ln-money:start').setLabel('Geld beheren').setEmoji('💰').setStyle(ButtonStyle.Primary))];
   return payload;
 }
