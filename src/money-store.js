@@ -22,6 +22,20 @@ export function moneyStore(db) {
     CREATE TABLE IF NOT EXISTS money_log_messages (id TEXT PRIMARY KEY,message TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS money_transactions (id TEXT PRIMARY KEY,guild TEXT,actor TEXT,kind TEXT,action TEXT,amount INTEGER,pot TEXT,time INTEGER,deltas TEXT);`);
   return {
+    resetMoneyOnce(guild) {
+      const key=`money-reset-2026-10-27-1:${guild}`;
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        if(db.prepare('SELECT value FROM meta WHERE key=?').get(key)) {db.exec('COMMIT');return false;}
+        for(const kind of ['zwart','wit']) {
+          const deltas=pots.map(pot=>-(db.prepare('SELECT amount FROM money_balances WHERE guild=? AND kind=? AND pot=?').get(guild,kind,pot)?.amount??0));
+          db.prepare('INSERT INTO money_transactions VALUES (?,?,?,?,?,?,?,?,?)').run(`${key}:${kind}`,guild,'reset',kind,'reset',-deltas.reduce((a,b)=>a+b,0),null,Date.now(),JSON.stringify(deltas));
+        }
+        db.prepare('UPDATE money_balances SET amount=0 WHERE guild=?').run(guild);
+        db.prepare('INSERT INTO meta VALUES (?,?)').run(key,'done');
+        db.exec('COMMIT');return true;
+      } catch(error) {db.exec('ROLLBACK');throw error;}
+    },
     initializeMoney(guild) {
       const key=`money-opening-2026-10-27:${guild}`;
       db.exec('BEGIN IMMEDIATE');

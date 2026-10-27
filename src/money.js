@@ -101,13 +101,14 @@ export async function handleMoney(i,guildId,store) {
 
 export function moneyLogPayload(t) {
   const opening=t.action==='opening';
+  const reset=t.action==='reset';
   const added=t.action==='add';
   const deltas=JSON.parse(t.deltas);
   const payload=branded('💰 LA NOCHE • GELDLOG',
-    opening?'🏁 **BEGINSTAND OVERGENOMEN**':added?'🟢 **GELD TOEGEVOEGD**':'🔴 **GELD VERWIJDERD**',[
+    reset?'🔄 **ALLE SALDO’S OP NUL GEZET**':opening?'🏁 **BEGINSTAND OVERGENOMEN**':added?'🟢 **GELD TOEGEVOEGD**':'🔴 **GELD VERWIJDERD**',[
       field('💵 BEDRAG',format(t.amount)),
       field('💱 GELDSOORT',t.kind==='zwart'?'⚫ Zwart geld':'⚪ Wit geld'),
-      field('👤 UITGEVOERD DOOR',opening?'Beginstand uit bestaand overzicht':`<@${t.actor}>`),
+      field('👤 UITGEVOERD DOOR',reset?'Eenmalige reset op verzoek van beheer':opening?'Beginstand uit bestaand overzicht':`<@${t.actor}>`),
       field('📊 BOEKING PER POTJE',pots.map((p,i)=>`${names[p]}: **${deltas[i]<0?'−':'+'}${format(Math.abs(deltas[i]))}**`).join('\n'),false),
       field('🕒 DATUM & TIJD',`<t:${Math.floor(t.time/1000)}:F>`,false)
     ],'ticket-banner.gif','ticket-logo.gif');

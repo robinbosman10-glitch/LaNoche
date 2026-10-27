@@ -95,3 +95,19 @@ test('money logs retry failures and record deliveries without changing balances'
  const log=moneyLogPayload(s.pendingMoneyLogs('g')[0]).embeds[0].toJSON();
  assert.match(log.description,/VERWIJDERD/);assert.match(log.fields.find(f=>f.name.includes('PER POTJE')).value,/−\$ 100/);
 });
+
+test('reset clears both money types once and preserves subsequent bookings and percentages',()=>{
+ const dir=mkdtempSync(join(tmpdir(),'ln-money-reset-'));let s=createStore(dir);
+ try {
+  s.initializeMoney('g');s.changeMoney(event);
+  assert.equal(s.resetMoneyOnce('g'),true);
+  assert.ok(s.moneyBalances('g').every(b=>b.amount===0));
+  const logs=s.moneyHistory('g').filter(t=>t.action==='reset');assert.equal(logs.length,2);
+  assert.match(moneyLogPayload(logs[0]).embeds[0].toJSON().description,/NUL/);
+  s.changeMoney({...event,id:'after-reset'});s.close();s=createStore(dir);
+  s.initializeMoney('g');assert.equal(s.resetMoneyOnce('g'),false);
+  assert.equal(s.moneyBalances('g').reduce((n,b)=>n+b.amount,0),1000000);
+  assert.deepEqual(allocation(1000000,'zwart'),[100000,450000,450000]);
+  assert.deepEqual(allocation(1000000,'wit'),[400000,600000,0]);
+ }finally{s.close();rmSync(dir,{recursive:true,force:true});}
+});
