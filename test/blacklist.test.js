@@ -128,7 +128,7 @@ test('logs queue only completed changes and retry after restart without repeatin
 
 test('notice keeps readable text above the banner and reuses the saved or recovered message',temporary(async store=>{
  const title='Als je dit kanaal ziet betekent het dat je een Permanent Blacklist hebt ontvangen';
- const payload=blacklistNoticePayload();assert.equal(payload.flags,32768);assert.equal(payload.components[0].toJSON().components[0].content,`**${title}**`);assert.equal(payload.embeds,undefined);assert.equal(payload.files.length,1);assert.equal(payload.components[0].toJSON().components[1].items[0].media.url,'attachment://permanent-blacklist-banner.png');
+ const payload=blacklistNoticePayload();assert.equal(payload.flags,32768);assert.equal(payload.components[0].toJSON().components[0].content,`## ${title}`);assert.equal(payload.embeds,undefined);assert.equal(payload.files.length,1);assert.equal(payload.components[0].toJSON().components[2].items[0].media.url,'attachment://permanent-blacklist-banner.png');
  assert.ok(blacklistVisibleChannels.has(blacklistNoticeChannel));
  let sends=0;const messages=new Collection();
  const channel={messages:{fetch:async input=>typeof input==='string'?messages.get(input):messages},send:async p=>{
@@ -153,5 +153,5 @@ test('old small notice is converted in place to readable text and a banner',temp
  const guild={id:'g',client:{user:{id:'bot'}},channels:{fetch:async()=>({messages:{fetch:async()=>message},send:async()=>assert.fail('must update existing notice')})}};
  await syncBlacklistNotice(guild,store);
  assert.equal(edited.flags,32768);assert.deepEqual(edited.embeds,[]);assert.equal(edited.content,null);assert.deepEqual(edited.attachments,[]);
- assert.doesNotMatch(edited.components[0].toJSON().components[0].content,/^#/);assert.equal(edited.files.length,1);assert.equal(edited.components[0].toJSON().components[1].type,12);
+ assert.match(edited.components[0].toJSON().components[0].content,/^## /);assert.equal(edited.files.length,1);assert.equal(edited.components[0].toJSON().components[2].type,12);
 }));

@@ -1,6 +1,6 @@
 import {fileURLToPath} from 'node:url';
 import {randomUUID,createHash} from 'node:crypto';
-import {PermissionFlagsBits as P,OverwriteType,MessageFlags,EmbedBuilder,ContainerBuilder,TextDisplayBuilder,MediaGalleryBuilder,MediaGalleryItemBuilder,AttachmentBuilder} from 'discord.js';
+import {PermissionFlagsBits as P,OverwriteType,MessageFlags,EmbedBuilder,ContainerBuilder,TextDisplayBuilder,MediaGalleryBuilder,MediaGalleryItemBuilder,AttachmentBuilder,SeparatorBuilder} from 'discord.js';
 import {UserError} from './logic.js';
 export const blacklistKeepRole='1553520983628062810';
 export const blacklistRole='1564650582080364704';
@@ -165,7 +165,8 @@ const noticeText='Als je dit kanaal ziet betekent het dat je een Permanent Black
 const noticeHeading='# Als je dit kanaal ziet betekent het dat je een\n# PERMANENT BLACKLIST\n# hebt ontvangen';
 export function blacklistNoticePayload() {
  return {flags:MessageFlags.IsComponentsV2,components:[new ContainerBuilder().setAccentColor(0xff7900)
-  .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**${noticeText}**`))
+  .addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${noticeText}`))
+  .addSeparatorComponents(new SeparatorBuilder().setDivider(false).setSpacing(2))
   .addMediaGalleryComponents(new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder()
    .setURL('attachment://permanent-blacklist-banner.png').setDescription('PERMANENT BLACKLIST')))],
   files:[new AttachmentBuilder(fileURLToPath(new URL('../assets/permanent-blacklist-banner.png',import.meta.url)),{name:'permanent-blacklist-banner.png'})],allowedMentions:{parse:[]}};
@@ -174,12 +175,15 @@ function isLargeNotice(message) {
  const card=message.components?.[0]?.toJSON?.()??message.components?.[0];
  return message.components?.length===1 && card?.type===17 && card.accent_color===0xed4245 && card.components?.length===1 && card.components[0].content===noticeHeading;
 }
-function isBannerNotice(message) {
+function isBannerNotice(message,current=false) {
  const card=message.components?.[0]?.toJSON?.()??message.components?.[0];
- return message.components?.length===1 && card?.type===17 && card.accent_color===0xff7900 && card.components?.length===2
-  && card.components[0].content===`**${noticeText}**` && card.components[1].type===12
-  && card.components[1].items?.[0]?.description==='PERMANENT BLACKLIST'
-  && Boolean(card.components[1].items[0].media?.url);
+ const parts=card?.components??[];const gallery=parts.at(-1);
+ const recognized=message.components?.length===1 && card?.type===17 && card.accent_color===0xff7900
+  && [2,3].includes(parts.length) && [`**${noticeText}**`,`## ${noticeText}`].includes(parts[0].content)
+  && gallery?.type===12 && gallery.items?.[0]?.description==='PERMANENT BLACKLIST'
+  && Boolean(gallery.items[0].media?.url);
+ return recognized && (!current || (parts.length===3 && parts[0].content===`## ${noticeText}`
+  && parts[1].type===14 && parts[1].divider===false && parts[1].spacing===2));
 }
 const noticeRuns=new Map();
 export function syncBlacklistNotice(guild,store) {
@@ -202,7 +206,7 @@ export function syncBlacklistNotice(guild,store) {
   }
   const payload=blacklistNoticePayload();
   if(message) {
-   if(!isBannerNotice(message))await message.edit({...payload,content:null,embeds:[],attachments:[]});
+   if(!isBannerNotice(message,true))await message.edit({...payload,content:null,embeds:[],attachments:[]});
   }else message=await channel.send(payload);
   store.setMeta(metaKey,message.id);
  })();noticeRuns.set(guild.id,run);
