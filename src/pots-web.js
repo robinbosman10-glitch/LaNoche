@@ -13,7 +13,7 @@ export async function handlePotsWrite(req,send,store,guild,session,path){
   const input=JSON.parse(raw);
   const member=await guild.members.fetch({user:session.user,force:true});
   // Recheck access after awaiting Discord; never authorize from client-supplied roles.
-  if(!currentLogsiteUser(req,store,guild.id)||!store.logsiteAllowed(guild.id,session.user))return send(401,{error:'Je toegang is verlopen.'});
+  if(!currentLogsiteUser(req,store,guild.id)||!store.logsiteAllowed(guild.id,session.user)||!store.logsitePages(guild.id,session.user).includes('pots'))return send(401,{error:'Je toegang is verlopen.'});
   const perms=potPermissions(member),reset=input.action==='reset';
   if(!['add','remove','reset'].includes(input.action))return send(400,{error:'Kies toevoegen, opnemen of resetten.'});
   if(!(reset?perms.reset:perms.manage))return send(403,{error:reset?'Alleen de aangewezen resetrol kan potjes resetten.':'Alleen de leidingrol kan geld beheren.'});

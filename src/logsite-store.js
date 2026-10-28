@@ -50,9 +50,11 @@ export function logsiteStore(db){
   }
   return pending;
  },
- queryWebLogs(guild,{cat='all',action='all',q='',ids=[],from=0,to=Date.now(),page=1,limit=50}={}){
+ attachmentLogCategory(guild,id){return db.prepare("SELECT cat FROM web_logs, json_each(web_logs.payload,'$.attachments') a WHERE guild=? AND json_extract(a.value,'$.id')=? LIMIT 1").get(guild,id)?.cat;},
+ queryWebLogs(guild,{allowedCats=logCategories,cat='all',action='all',q='',ids=[],from=0,to=Date.now(),page=1,limit=50}={}){
   const clauses=['guild=?','time>=?','time<=?'],args=[guild,from,to];
-  const counts=db.prepare('SELECT cat,COUNT(*) n FROM web_logs WHERE guild=? AND time>=? AND time<=? GROUP BY cat').all(...args);
+  clauses.push(allowedCats.length?'cat IN ('+allowedCats.map(()=>'?').join(',')+')':'0');args.push(...allowedCats);
+  const counts=db.prepare('SELECT cat,COUNT(*) n FROM web_logs WHERE '+clauses.join(' AND ')+' GROUP BY cat').all(...args);
   if(cat!=='all'){clauses.push('cat=?');args.push(cat);}
   const base=clauses.join(' AND '),baseArgs=[...args];
   const actions=db.prepare(`SELECT action,COUNT(*) n FROM web_logs WHERE ${base} GROUP BY action ORDER BY n DESC`).all(...args);

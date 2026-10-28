@@ -1,3 +1,4 @@
+import {logsitePages} from './logsite-pages.js';
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 import {LOGSITE_OWNER,sameSecret} from './logsite-auth-store.js';
@@ -67,7 +68,7 @@ export function createLogsiteAuth(store,getClient,guildId,{env=process.env,fetch
   if(path==='/api/me'){
    if(req.method!=='GET')return send(405,{error:'Methode niet toegestaan.'});
    const guild=getClient()?.guilds.cache.get(guildId);
-   return send(200,{guild:{name:guild?.name||'La Noche',icon:guild?.iconURL({extension:guild.icon?.startsWith('a_')?'gif':'png',size:128})||'/brand/logo.gif'},configured,loginUrl:origin+'/auth/discord',user:user?{id:user.user,name:user.username,avatar:user.avatar,admin:user.user===LOGSITE_OWNER,allowed:store.logsiteAllowed(guildId,user.user),csrf:user.csrf}:null});
+   return send(200,{guild:{name:guild?.name||'La Noche',icon:guild?.iconURL({extension:guild.icon?.startsWith('a_')?'gif':'png',size:128})||'/brand/logo.gif'},configured,loginUrl:origin+'/auth/discord',user:user?{id:user.user,name:user.username,avatar:user.avatar,admin:user.user===LOGSITE_OWNER,allowed:store.logsiteAllowed(guildId,user.user),csrf:user.csrf,pages:store.logsitePages(guildId,user.user)}:null});
   }
   if(!user)return send(401,{error:'Log eerst in met Discord.'});
   if(req.method!=='GET'&&(req.headers.origin!==origin||!sameSecret(req.headers['x-csrf-token'],user.csrf)))return send(403,{error:'Ongeldig beveiligingstoken. Herlaad de pagina.'});
@@ -75,16 +76,17 @@ export function createLogsiteAuth(store,getClient,guildId,{env=process.env,fetch
    if(req.method!=='POST')return send(405,{error:'Methode niet toegestaan.'});store.logoutLogsite(cookieValue(req,sessionCookie));res.setHeader('Set-Cookie',cookie(sessionCookie,'',0));return send(200,{ok:true});
   }
   if(user.user!==LOGSITE_OWNER)return send(403,{error:'Alleen de vaste beheerder kan accounts beheren.'});
-  if(path==='/api/access'&&req.method==='GET')return send(200,{owner:LOGSITE_OWNER,users:store.logsiteUsers(guildId)});
-  if(path==='/api/access'&&['POST','DELETE'].includes(req.method)){
+  if(path==='/api/access'&&req.method==='GET')return send(200,{owner:LOGSITE_OWNER,users:store.logsiteUsers(guildId),pages:logsitePages});
+  if(path==='/api/access'&&['POST','DELETE','PATCH'].includes(req.method)){
    if(!req.headers['content-type']?.startsWith('application/json'))return send(415,{error:'JSON vereist.'});
    try{
     let raw='';for await(const chunk of req){raw+=chunk;if(Buffer.byteLength(raw)>2048)return send(413,{error:'Verzoek te groot.'});}
     const input=JSON.parse(raw);const id=typeof input.id==='string'?input.id.trim():'';const add=req.method==='POST';
-    const changed=store.changeLogsiteAccess(guildId,user.user,id,add);
-    if(changed)store.recordWebLog(guildId,{id:'access:'+Date.now()+':'+id,cat:'system',time:Date.now(),action:add?'Website-toegang toegevoegd':'Website-toegang ingetrokken',actor:user.user,user:id,detail:'Beheer van de Discord-ID-toegangslijst.'});
+    const settings=('label' in input||'pages' in input)?{label:input.label,pages:input.pages}:undefined;
+    const changed=req.method==='PATCH'?store.updateLogsiteAccount(guildId,user.user,id,input.label,input.pages):store.changeLogsiteAccess(guildId,user.user,id,add,settings);
+    if(changed)store.recordWebLog(guildId,{id:'access:'+Date.now()+':'+id,cat:'system',time:Date.now(),action:req.method==='PATCH'?'Website-paginatoegang aangepast':add?'Website-toegang toegevoegd':'Website-toegang ingetrokken',actor:user.user,user:id,detail:'Beheer van de Discord-ID-toegangslijst.'});
     return send(200,{ok:true,changed});
-   }catch(e){return send(400,{error:e.message==='owner_immutable'?'Het vaste beheerdersaccount kan niet worden gewijzigd.':'Vul een geldig Discord-ID in als tekst (17–20 cijfers).'});}
+   }catch(e){return send(400,{error:e.message==='owner_immutable'?'Het vaste beheerdersaccount kan niet worden gewijzigd.':e.message==='invalid_settings'?'Gebruik een naam van maximaal 80 tekens en geldige pagina’s.':e.message==='account_missing'?'Dit account bestaat niet meer.':'Vul een geldig Discord-ID in als tekst (17–20 cijfers).'});}
   }
   return send(405,{error:'Methode niet toegestaan.'});
  };

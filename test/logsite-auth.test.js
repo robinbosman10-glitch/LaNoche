@@ -77,7 +77,7 @@ test('live member list requires access, groups by highest rank, excludes bots an
 }));
 
 test('archived attachments require an allowed session and migration status remains owner-only',temporary(async store=>{
- const api=createLogsiteApi(store,mockClient,G);store.archiveAttachment(G,'555','old.html',Buffer.from('<script>archived</script>'));
+ const api=createLogsiteApi(store,mockClient,G);store.archiveAttachment(G,'555','old.html',Buffer.from('<script>archived</script>'));store.recordWebLog(G,{id:'attachment-test',cat:'tickets',time:Date.now(),attachments:[{id:'555',name:'old.html'}]});
  assert.equal((await dispatch(api,'/api/log-attachment?id=555')).status,401);
  const denied=store.loginLogsite(G,X,'Denied');assert.equal((await dispatch(api,'/api/log-attachment?id=555','GET',{cookie:sessionCookie+'='+denied})).status,403);
  store.changeLogsiteAccess(G,LOGSITE_OWNER,V,true);const token=store.loginLogsite(G,V,'Viewer');const h={cookie:sessionCookie+'='+token};
@@ -136,4 +136,37 @@ test('website money operations reuse allocation and enforce role, CSRF, balance 
  assert.equal((await send('/api/pots/book',reset)).status,200);assert.equal(store.moneyBalances(G).reduce((n,b)=>n+b.amount,0),0);assert.equal(JSON.parse((await send('/api/pots/book',reset)).body).changed,false);
  assert.equal((await send('/api/pots/book',add)).status,403);
  store.changeLogsiteAccess(G,LOGSITE_OWNER,V,false);assert.equal((await send('/api/pots/book',reset)).status,401);
+}));
+test('owner-only account labels remain private; page settings persist and default existing access remains',temporary(async store=>{
+ const {allLogsitePages}=await import('../src/logsite-pages.js');store.changeLogsiteAccess(G,LOGSITE_OWNER,V,true);
+ assert.deepEqual(store.logsitePages(G,V),allLogsitePages);
+ const auth=createLogsiteAuth(store,mockClient,G,{env:config}),owner=store.loginLogsite(G,LOGSITE_OWNER,'Owner'),o=store.logsiteSession(owner),viewer=store.loginLogsite(G,V,'Actual Discord name'),v=store.logsiteSession(viewer);
+ const h={cookie:sessionCookie+'='+owner,origin,'x-csrf-token':o.csrf,'content-type':'application/json'},vh={cookie:sessionCookie+'='+viewer,origin,'x-csrf-token':v.csrf,'content-type':'application/json'};
+ const body=JSON.stringify({id:V,label:'PRIVATE ADMIN LABEL',pages:['pots','overview','money']});
+ assert.equal((await dispatch(auth,'/api/access','PATCH',vh,body)).status,403);
+ assert.equal((await dispatch(auth,'/api/access','PATCH',{...h,origin:'https://evil.test'},body)).status,403);
+ assert.equal((await dispatch(auth,'/api/access','PATCH',h,body)).status,200);
+ assert.deepEqual(store.logsitePages(G,V),['pots','overview','money']);assert.ok(store.logsiteSession(viewer));
+ const listing=JSON.parse((await dispatch(auth,'/api/access','GET',h)).body);assert.equal(listing.users[0].label,'PRIVATE ADMIN LABEL');
+ const me=await dispatch(auth,'/api/me','GET',vh);assert.doesNotMatch(me.body,/PRIVATE ADMIN LABEL/);assert.equal(JSON.parse(me.body).user.name,'Actual Discord name');
+ assert.equal((await dispatch(auth,'/api/access','PATCH',h,JSON.stringify({id:V,label:'test',pages:['made-up']}))).status,400);
+ assert.throws(()=>store.updateLogsiteAccount(G,LOGSITE_OWNER,LOGSITE_OWNER,'Owner',[]),/owner_immutable/);
+ assert.deepEqual(store.logsitePages(G,LOGSITE_OWNER),allLogsitePages);
+ store.updateLogsiteAccount(G,LOGSITE_OWNER,V,'Zero',[]);assert.deepEqual(store.logsitePages(G,V),[]);
+ store.changeLogsiteAccess(G,LOGSITE_OWNER,V,false);assert.equal(store.logsiteUsers(G).length,0);
+}));
+test('page grants scope data, aggregate counts, direct URLs, attachments and pot mutations',temporary(async store=>{
+ store.changeLogsiteAccess(G,LOGSITE_OWNER,V,true,{label:'Secret name',pages:['overview','money','pots']});const token=store.loginLogsite(G,V,'Viewer'),h={cookie:sessionCookie+'='+token};
+ const api=createLogsiteApi(store,mockClient,G);
+ store.recordWebLog(G,{id:'allowed',cat:'money',time:Date.now(),action:'Allowed money'});store.recordWebLog(G,{id:'hidden',cat:'tickets',time:Date.now(),action:'Secret ticket',attachments:[{id:'secret-file'}]});
+ store.archiveAttachment(G,'secret-file','private.html',Buffer.from('secret'));
+ const logs=await dispatch(api,'/api/logsite?cat=all','GET',h),data=JSON.parse(logs.body);
+ assert.equal(logs.status,200);assert.equal(data.total,1);assert.equal(data.stats.total,1);assert.deepEqual(data.counts,[{cat:'money',n:1}]);assert.doesNotMatch(logs.body,/Secret ticket|Secret name|hidden/);
+ assert.equal((await dispatch(api,'/api/logsite?cat=tickets','GET',h)).status,403);
+ for(const path of ['/api/vault','/api/members','/api/log-attachment?id=secret-file','/t/'+'a'.repeat(64),'/t/'+'a'.repeat(64)+'/download'])assert.equal((await dispatch(api,path,'GET',h)).status,403,path);
+ assert.equal((await dispatch(api,'/api/pots','GET',h)).status,200);
+ store.updateLogsiteAccount(G,LOGSITE_OWNER,V,'No pages',[]);
+ for(const path of ['/api/pots','/api/logsite?cat=all','/api/logsite?cat=money'])assert.equal((await dispatch(api,path,'GET',h)).status,403,path);
+ assert.equal((await dispatch(api,'/api/pots/book','POST',h,'{}')).status,403);
+ store.updateLogsiteAccount(G,LOGSITE_OWNER,V,'Overview only',['overview']);const empty=JSON.parse((await dispatch(api,'/api/logsite','GET',h)).body);assert.equal(empty.total,0);assert.deepEqual(empty.counts,[]);
 }));

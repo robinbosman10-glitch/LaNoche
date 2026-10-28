@@ -54,7 +54,17 @@ $('#gateLogout').onclick=logout;
 function status(message,online=false){$('#feedstate').textContent=message;$('.sample-label').textContent=online?'VERBONDEN':'NIET LIVE';document.documentElement.dataset.online=online?'yes':'no';}
 function bounds(){const p=$('#period').value;if(p==='hour')return Date.now()-3600000;if(p==='all')return 0;const now=new Date();now.setHours(0,0,0,0);return now.getTime();}
 function query(pageOverride=page){return new URLSearchParams({cat:active,action:actionFilter,q:$('#search').value.trim(),from:String(bounds()),period:$('#period').value,page:String(pageOverride)});}
-function nav(){const counts=Object.fromEntries((data?.counts||[]).map(c=>[c.cat,c.n]));let html=`<a class="navitem ${active==='all'?'active':''}" href="#/overzicht" title="Overzicht">${icon('grid')}<span class="navtext">Overzicht</span><span class="navcount">${data?Object.values(counts).reduce((a,b)=>a+b,0):'—'}</span></a>`;html+=`<div class="navgroup">Organisatie</div><a class="navitem ${active==='roster'?'active':''}" href="#/ledenlijst" title="Live ledenlijst">${icon('users')}<span class="navtext">Live ledenlijst</span></a>`;html+=`<a class="navitem ${active==='safe'?'active':''}" href="#/kluis" title="Kluisoverzicht">${icon('vault')}<span class="navtext">Kluisoverzicht</span></a>`;html+=`<a class="navitem ${active==='pots'?'active':''}" href="#/potjes" title="Potjesoverzicht">${icon('money')}<span class="navtext">Potjesoverzicht</span></a>`;for(const group of ['Discord','La Noche','Systeem']){html+=`<div class="navgroup">${group}</div>`;for(const [key,c] of Object.entries(cats).filter(([,c])=>c.group===group))html+=`<a class="navitem ${active===key?'active':''}" href="#/logs/${key}" title="${esc(c.label)}">${icon(c.icon)}<span class="navtext">${esc(c.label)}</span><span class="navcount">${data?counts[key]||0:'—'}</span></a>`;}$('#nav').innerHTML=html;}
+const canPage=id=>!!identity?.pages?.includes(id);
+const pageRoute=id=>id==='overview'?'#/overzicht':id==='roster'?'#/ledenlijst':id==='safe'?'#/kluis':id==='pots'?'#/potjes':'#/logs/'+id;
+function nav(){
+ const counts=Object.fromEntries((data?.counts||[]).map(c=>[c.cat,c.n]));let html='';
+ if(canPage('overview'))html+=`<a class="navitem ${active==='all'?'active':''}" href="#/overzicht">${icon('grid')}<span class="navtext">Overzicht</span><span class="navcount">${data?Object.values(counts).reduce((a,b)=>a+b,0):'—'}</span></a>`;
+ const special=[['roster','Live ledenlijst','users'],['safe','Kluisoverzicht','vault'],['pots','Potjesoverzicht','money']].filter(([id])=>canPage(id));
+ if(special.length)html+='<div class="navgroup">Organisatie</div>';
+ for(const [id,label,ic] of special)html+=`<a class="navitem ${active===id?'active':''}" href="${pageRoute(id)}">${icon(ic)}<span class="navtext">${label}</span></a>`;
+ for(const group of ['Discord','La Noche','Systeem']){const entries=Object.entries(cats).filter(([key,c])=>c.group===group&&canPage(key));if(!entries.length)continue;html+=`<div class="navgroup">${group}</div>`;for(const [key,c] of entries)html+=`<a class="navitem ${active===key?'active':''}" href="#/logs/${key}">${icon(c.icon)}<span class="navtext">${esc(c.label)}</span><span class="navcount">${data?counts[key]||0:'—'}</span></a>`;}
+ $('#nav').innerHTML=html;
+}
 const fmtTime=t=>new Date(t).toLocaleString('nl-NL',{timeZone:'Europe/Amsterdam',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'});
 function render(){
  nav();const s=data?.stats;$('#stats').innerHTML=[['Logmomenten',s?.total,'In deze categorie en periode','chart'],['Uitvoerders / leden',s?.people,'Unieke geregistreerde personen','users'],['Afgelopen uur',s?.recent||0,'Binnen deze selectie','message'],['Soorten acties',s?.types,'Geregistreerde gebeurtenissen','grid']].map(([label,n,note,ic])=>`<article class="stat"><div class="stat-top">${label}${icon(ic)}</div><div class="stat-main"><div class="stat-value">${data?Number(n||0).toLocaleString('nl-NL'):'—'}</div></div><div class="stat-note">${note}</div></article>`).join('');
@@ -73,6 +83,15 @@ function banner(){
  b.innerHTML=`<b>${warnings.length?'Controleer logdekking':'Verbonden met '+esc(data.guild.name)}</b><p>${esc(warnings.join(' ')||c.history)} <span>Laatste synchronisatie: ${fmtTime(lastSuccess)}.</span></p>`;
 }
 async function refresh(){
+ if(connection){
+  try{const r=await fetch('/api/me',{cache:'no-store',credentials:'same-origin'});if(!r.ok)throw new Error();const me=await r.json();
+   if(!me.user?.allowed){await loadIdentity();return;}
+   if(JSON.stringify(me.user.pages)!==JSON.stringify(identity?.pages)){
+    identity=me.user;data=null;roster=null;vault=null;potsData=null;$('#memberGroups').replaceChildren();$('#vaultContents').replaceChildren();$('#potsContents').replaceChildren();closeDetail();route();return;
+   }
+  }catch{status('Verbinding onderbroken');clearTimeout(timer);if(!paused)timer=setTimeout(refresh,interval);return;}
+ }
+ if(active==='none'){clearTimeout(timer);if(connection&&!paused)timer=setTimeout(refresh,interval);return;}
  if(active==='pots')return refreshPots();
  if(active==='safe')return refreshVault();
  if(active==='roster')return refreshMembers();
@@ -87,14 +106,20 @@ async function refresh(){
 }
 function route(){
  const m=location.hash.match(/^#\/logs\/(\w+)$/);active=location.hash==='#/potjes'?'pots':location.hash==='#/kluis'?'safe':location.hash==='#/ledenlijst'?'roster':m&&cats[m[1]]?m[1]:'all';actionFilter='all';page=1;data=null;$('#search').value='';
+ const requested=active==='all'?'overview':active;
+ if(!canPage(requested)){
+  const next=identity?.pages?.[0];if(next){location.hash=pageRoute(next);return;}
+  active='none';
+ }
+ const noPages=active==='none';$('#noPages').hidden=!noPages;$('#pause').hidden=noPages;
  const potsPage=active==='pots';$('#potsPanel').hidden=!potsPage;
  const vaultPage=active==='safe';$('#vaultPanel').hidden=!vaultPage;
  const rosterPage=active==='roster';$('#memberPanel').hidden=!rosterPage;if(rosterPage&&!roster)$('#memberStatus').textContent='Leden laden…';
- for(const sel of ['#stats','.insights','.logpanel','#connectionBanner'])$(sel).hidden=rosterPage||vaultPage||potsPage;
- $('#export').hidden=rosterPage||vaultPage||potsPage;
- $('.pagehead h1').innerHTML=(potsPage?'De potjes':vaultPage?'De kluis':rosterPage?'De familie':active==='all'?'Alles in beeld':esc(cats[active].label))+'<span>.</span>';
- $('.pagehead p').textContent=potsPage?'Elk potje in beeld. Saldo, verdeling en totaal.':vaultPage?'Geld en voorraad. Altijd het actuele totaal.':rosterPage?'Alle gangleden, per hoogste rang. Rechtstreeks uit Discord.':active==='all'?'Elke geregistreerde actie. Eén overzicht.':cats[active].desc;
- $('.breadcrumb strong').textContent=potsPage?'Potjesoverzicht':vaultPage?'Kluisoverzicht':rosterPage?'Ledenlijst':active==='all'?'Overzicht':cats[active].label;render();refresh();
+ for(const sel of ['#stats','.insights','.logpanel','#connectionBanner'])$(sel).hidden=rosterPage||vaultPage||potsPage||noPages;
+ $('#export').hidden=rosterPage||vaultPage||potsPage||noPages;
+ $('.pagehead h1').innerHTML=(noPages?'Jouw toegang':potsPage?'De potjes':vaultPage?'De kluis':rosterPage?'De familie':active==='all'?'Alles in beeld':esc(cats[active].label))+'<span>.</span>';
+ $('.pagehead p').textContent=noPages?'Je account heeft nog geen toegestane pagina’s.':potsPage?'Elk potje in beeld. Saldo, verdeling en totaal.':vaultPage?'Geld en voorraad. Altijd het actuele totaal.':rosterPage?'Alle gangleden, per hoogste rang. Rechtstreeks uit Discord.':active==='all'?'Elke geregistreerde actie. Eén overzicht.':cats[active].desc;
+ $('.breadcrumb strong').textContent=noPages?'Toegang':potsPage?'Potjesoverzicht':vaultPage?'Kluisoverzicht':rosterPage?'Ledenlijst':active==='all'?'Overzicht':cats[active].label;render();refresh();
 }
 function renderMembers(){
  const q=$('#memberSearch').value.trim().toLowerCase();let shown=0;
@@ -127,17 +152,28 @@ $('#export').textContent='Exporteer deze pagina';$('#export').onclick=()=>{const
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='k'){e.preventDefault();(active==='roster'?$('#memberSearch'):$('#search')).focus();}if(e.key==='Escape')closeDetail();if(e.key==='Tab'&&!$('#drawer').hidden){const items=$('#drawer').querySelectorAll('button,a');if(e.shiftKey&&document.activeElement===items[0]){e.preventDefault();items[items.length-1].focus();}else if(!e.shiftKey&&document.activeElement===items[items.length-1]){e.preventDefault();items[0].focus();}}});
 window.addEventListener('hashchange',route);$('#date').textContent=new Date().toLocaleDateString('nl-NL');$('#year').textContent=new Date().getFullYear();loadIdentity();
 
+let accountPageOptions=[];
+function pageChecks(selected=[]){return accountPageOptions.map(p=>`<label class="page-option"><input type="checkbox" name="page" value="${esc(p.id)}" ${selected.includes(p.id)?'checked':''}><span>${esc(p.label)}</span></label>`).join('');}
 async function loadAccounts(){
  const r=await fetch('/api/access',{credentials:'same-origin',cache:'no-store'});const result=await r.json();if(!r.ok)throw new Error(result.error);
- $('#accountList').innerHTML=`<div class="account-row"><div><b>Vaste beheerder</b><small>${esc(result.owner)}</small></div><span class="detailbadge">Beheerder · vast</span></div>`+result.users.map(u=>`<div class="account-row"><div><b>Logtoegang</b><small>${esc(u.user)}</small></div><button class="button" data-remove="${esc(u.user)}">Verwijderen</button></div>`).join('');
+ accountPageOptions=result.pages;
+ if(!$('#newAccountPages').children.length)$('#newAccountPages').innerHTML=pageChecks();
+ $('#accountList').innerHTML=`<div class="account-row"><div><b>Vaste beheerder</b><small>${esc(result.owner)}</small></div><span class="detailbadge">Alle pagina’s · vast</span></div>`+result.users.map(u=>`<details class="account-editor"><summary><span><b>${esc(u.label||'Account zonder interne naam')}</b><small>${esc(u.user)}</small></span><span class="detailbadge">${u.pages.length} / ${accountPageOptions.length} pagina’s</span></summary><form data-account="${esc(u.user)}"><label>Interne naam<input name="label" maxlength="80" value="${esc(u.label)}" placeholder="Naam voor jouw overzicht" autocomplete="off"></label><fieldset class="account-pages"><legend>Toegestane pagina’s</legend><div class="account-bulk"><button class="button" type="button" data-check="all">Alles selecteren</button><button class="button" type="button" data-check="none">Alles uitzetten</button></div><div class="page-options">${pageChecks(u.pages)}</div></fieldset><div class="account-bulk"><button class="button accent" type="submit">Naam en pagina’s opslaan</button><button class="button" type="button" data-remove="${esc(u.user)}">Account verwijderen</button></div><p class="account-result" role="status"></p></form></details>`).join('');
 }
 $('#accountsButton').onclick=async()=>{$('#accountsDialog').showModal();$('#accountMessage').textContent='Laden…';try{await loadAccounts();$('#accountMessage').textContent='';}catch(e){$('#accountMessage').textContent=e.message;}};
 $('#closeAccounts').onclick=()=>$('#accountsDialog').close();
-async function changeAccount(id,add){
- const r=await fetch('/api/access',{method:add?'POST':'DELETE',credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRF-Token':identity.csrf},body:JSON.stringify({id})});const result=await r.json();if(!r.ok)throw new Error(result.error);await loadAccounts();$('#accountMessage').textContent=result.changed?(add?'Toegang toegevoegd.':'Toegang ingetrokken. Open sessies van dit account zijn beëindigd.'):'Deze toegang was al zo ingesteld.';
+async function accountRequest(method,body){
+ const r=await fetch('/api/access',{method,credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRF-Token':identity.csrf},body:JSON.stringify(body)});const result=await r.json();if(!r.ok)throw new Error(result.error);return result;
 }
-$('#addAccount').onsubmit=async e=>{e.preventDefault();const b=$('#addAccount button');b.disabled=true;try{await changeAccount($('#accountId').value.trim(),true);$('#accountId').value='';}catch(e){$('#accountMessage').textContent=e.message;}finally{b.disabled=false;}};
-$('#accountList').onclick=async e=>{const b=e.target.closest('[data-remove]');if(!b)return;b.disabled=true;try{await changeAccount(b.dataset.remove,false);}catch(e){$('#accountMessage').textContent=e.message;b.disabled=false;}};
+const selectedPages=form=>[...form.querySelectorAll('input[name="page"]:checked')].map(e=>e.value);
+function bulkPages(e){const b=e.target.closest('[data-check]');if(!b)return false;for(const c of b.closest('fieldset').querySelectorAll('input[type="checkbox"]'))c.checked=b.dataset.check==='all';return true;}
+$('#addAccount').onclick=bulkPages;
+$('#addAccount').onsubmit=async e=>{e.preventDefault();const b=$('#addAccount button[type="submit"]');b.disabled=true;try{await accountRequest('POST',{id:$('#accountId').value.trim(),label:$('#accountLabel').value.trim(),pages:selectedPages($('#addAccount'))});$('#addAccount').reset();await loadAccounts();$('#accountMessage').textContent='Account opgeslagen met de gekozen pagina’s.';}catch(e){$('#accountMessage').textContent=e.message;}finally{b.disabled=false;}};
+$('#accountList').onclick=async e=>{if(bulkPages(e))return;const b=e.target.closest('[data-remove]');if(!b)return;b.disabled=true;try{await accountRequest('DELETE',{id:b.dataset.remove});await loadAccounts();$('#accountMessage').textContent='Account verwijderd. Open sessies zijn beëindigd.';}catch(e){$('#accountMessage').textContent=e.message;b.disabled=false;}};
+$('#accountList').onsubmit=async e=>{
+ e.preventDefault();const form=e.target,b=form.querySelector('button[type="submit"]'),message=form.querySelector('.account-result');b.disabled=true;
+ try{await accountRequest('PATCH',{id:form.dataset.account,label:form.querySelector('input[name="label"]').value.trim(),pages:selectedPages(form)});const summary=form.closest('details').querySelector('summary');summary.querySelector('b').textContent=form.querySelector('input[name="label"]').value.trim()||'Account zonder interne naam';summary.querySelector('.detailbadge').textContent=selectedPages(form).length+' / '+accountPageOptions.length+' pagina’s';message.textContent='Opgeslagen. Nieuwe paginarechten gelden direct.';}catch(e){message.textContent=e.message;}finally{b.disabled=false;}
+};
 
 const vaultNumber=n=>Number(n||0).toLocaleString('nl-NL');
 function renderVault(){
