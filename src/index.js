@@ -1,4 +1,5 @@
 import {createWarehouseApi} from './warehouse-api.js';
+import {createOwnerLogDm} from './owner-log-dm.js';
 import {createSiteActivityApi} from './site-activity-api.js';
 import {createLogRetirement} from './log-retirement.js';
 import {createLogsiteAuth} from './logsite-auth.js';
@@ -51,6 +52,11 @@ try {
   else console.warn('$delete staat uit: schakel Message Content Intent in de Developer Portal in en herstart de bot.');
 } catch { console.warn('Message Content Intent kon niet worden gecontroleerd; $delete is voorlopig uitgeschakeld.'); }
 const client = new Client({ intents, partials:[Partials.Message,Partials.Reaction,Partials.User], allowedMentions: { parse: [] } });
+const ownerLogDm=createOwnerLogDm(client,config.guildId,store,{
+  // Do not feed delivery errors back into the log stream being delivered.
+  onError:error=>console.error('Privélogmelding versturen mislukt',error?.code??error?.name),
+  onSent:count=>console.log(`Privélogmeldingen verstuurd aan 424086753327054849: ${count}.`)
+});
 const serverLogs=installServerLogs(client,config.guildId,store,error=>console.error('Serverlogs plaatsen mislukt',error?.code??error?.name));
 let ready = false;
 let refreshTimer;
@@ -60,7 +66,7 @@ let moneyTimer;
 let historyTimer;
 let absenceRefreshing=false;
 let liveRefresh;
-function stop(code) { serverLogs.stop(); clearInterval(historyTimer); web.close(); clearInterval(moneyTimer); clearInterval(refreshTimer); clearInterval(absenceTimer); clearInterval(auditTimer); liveRefresh?.stop(); client.destroy(); store.close(); process.exit(code); }
+function stop(code) { ownerLogDm.stop(); serverLogs.stop(); clearInterval(historyTimer); web.close(); clearInterval(moneyTimer); clearInterval(refreshTimer); clearInterval(absenceTimer); clearInterval(auditTimer); liveRefresh?.stop(); client.destroy(); store.close(); process.exit(code); }
 function logError(label, error) {
   // Do not log request bodies, headers, tokens or interaction payloads.
   serverLogs.error(label,error);
@@ -77,6 +83,7 @@ client.once(Events.ClientReady, async current => {
     store.beginMoneyLogReset(guild.id);
     store.initializeVault(guild.id);
     ready = true;
+    ownerLogDm.start();
     const history=createLogHistory(guild,store);
     const retireLogs=createLogRetirement(guild,store);
     const retireOperations=createLogRetirement(guild,store,{operational:true});

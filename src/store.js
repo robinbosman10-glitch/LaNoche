@@ -1,4 +1,5 @@
 import {warehouseStore} from './warehouse-store.js';
+import {ownerLogDmStore} from './owner-log-dm-store.js';
 import {siteActivityStore} from './site-activity-store.js';
 import {logRetirementStore} from './log-retirement-store.js';
 import {logsiteAuthStore} from './logsite-auth-store.js';
@@ -45,6 +46,7 @@ export function createStore(directory) {
     ...logsiteAuthStore(db),
     ...vaultStore(db),
     ...warehouseStore(db),
+    ...ownerLogDmStore(db),
     recordVault(id,guild,entry) {
       db.exec('BEGIN IMMEDIATE');
       try {
