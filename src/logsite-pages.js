@@ -1,6 +1,6 @@
 export const logsitePages=[
- ['overview','Overzicht'],['roster','Live ledenlijst'],['safe','Kluisoverzicht'],['pots','Potjesoverzicht'],
- ['messages','Berichten'],['channels','Kanalen & threads'],['roles','Rollen & rechten'],['voice','Voice'],['members','Leden'],['moderation','Bans, kicks & time-outs'],['server','Server & integraties'],['tickets','Tickets & transcripts'],['absence','Afwezigheid'],['money','Potjeslogs'],['vault','Kluislogs'],['blacklist','Perm Blacklist'],['ranks','Gangleden & rangen'],['warns','Waarschuwingen'],['commands','Botcommands'],['system','Bot & fouten']
+ ['overview','Overzicht'],['roster','Live ledenlijst'],['safe','Kluisoverzicht'],['pots','Potjesoverzicht'],['warehousestock','Loodsen'],
+ ['messages','Berichten'],['channels','Kanalen & threads'],['roles','Rollen & rechten'],['voice','Voice'],['members','Leden'],['moderation','Bans, kicks & time-outs'],['server','Server & integraties'],['tickets','Tickets & transcripts'],['absence','Afwezigheid'],['money','Potjeslogs'],['vault','Kluislogs'],['warehouses','Loodsen Logs'],['blacklist','Perm Blacklist'],['ranks','Gangleden & rangen'],['warns','Waarschuwingen'],['commands','Botcommands'],['system','Bot & fouten']
 ].map(([id,label])=>({id,label}));
 export const allLogsitePages=logsitePages.map(p=>p.id);
 export function accountSettings(label,pages){

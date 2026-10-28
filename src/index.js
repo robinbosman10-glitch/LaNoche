@@ -1,3 +1,4 @@
+import {createWarehouseApi} from './warehouse-api.js';
 import {createSiteActivityApi} from './site-activity-api.js';
 import {createLogRetirement} from './log-retirement.js';
 import {createLogsiteAuth} from './logsite-auth.js';
@@ -38,7 +39,8 @@ transcriptBase(); // Validate configured public origin before publishing links.
 const logAuth=createLogsiteAuth(store,()=>client,config.guildId);
 const logApi=createLogsiteApi(store,()=>client,config.guildId);
 const siteActivityApi=createSiteActivityApi(store,config.guildId);
-const web=createTranscriptServer(store,async(req,res)=>(await logAuth(req,res))||(await siteActivityApi(req,res))||(await logApi(req,res)));
+const warehouseApi=createWarehouseApi(store,()=>client,config.guildId);
+const web=createTranscriptServer(store,async(req,res)=>(await logAuth(req,res))||(await siteActivityApi(req,res))||(await warehouseApi(req,res))||(await logApi(req,res)));
 web.on('error',()=>{console.error('Transcriptwebsite starten mislukt. Controleer PORT.');process.exit(1);});
 web.listen(Number(process.env.PORT||3000),'0.0.0.0');
 const intents=[GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages,GatewayIntentBits.GuildVoiceStates,GatewayIntentBits.GuildModeration,GatewayIntentBits.GuildMessageReactions,GatewayIntentBits.GuildInvites,GatewayIntentBits.GuildScheduledEvents,GatewayIntentBits.AutoModerationExecution];

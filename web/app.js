@@ -1,5 +1,6 @@
 const $=s=>document.querySelector(s);
 const paths={grid:'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z',message:'M21 11a8 8 0 0 1-8 8H6l-4 3V11a9 9 0 0 1 19 0Z',voice:'M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3Z M5 10v2a7 7 0 0 0 14 0v-2 M12 19v3 M8 22h8',roles:'m3 12 9-9h8v8l-9 10-8-9Z M16 7h.01',shield:'m12 3 9 4v6c0 5-9 9-9 9s-9-4-9-9V7l9-4Z M8 12l3 3 5-6',users:'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 3a4 4 0 1 1 0 8 4 4 0 0 1 0-8 M17 4a4 4 0 0 1 0 8 M22 21v-2a4 4 0 0 0-3-4',channel:'M9 3 7 21 M17 3l-2 18 M3 9h18 M2 15h18',settings:'M12 8a4 4 0 1 1 0 8 4 4 0 0 1 0-8 M12 2v3 M12 19v3 M2 12h3 M19 12h3 M5 5l2 2 M17 17l2 2 M5 19l2-2 M17 7l2-2',download:'M12 3v12 M7 10l5 5 5-5 M4 16v5h16v-5',pause:'M8 5v14 M16 5v14',play:'m8 4 12 8-12 8Z',search:'M10 3a7 7 0 1 1 0 14 7 7 0 0 1 0-14 M15 15l6 6',calendar:'M4 5h16v16H4z M8 2v6 M16 2v6 M4 10h16',refresh:'M20 7a9 9 0 1 0 1 8 M20 2v6h-6',chart:'M4 20V10 M12 20V4 M20 20v-7',ticket:'M3 5h18v5a2 2 0 0 0 0 4v5H3v-5a2 2 0 0 0 0-4V5Z M15 5v14',money:'M3 5h18v14H3z M12 8a4 4 0 1 1 0 8 4 4 0 0 1 0-8 M6 12h.01 M18 12h.01',vault:'M4 3h16v18H4z M12 8a4 4 0 1 1 0 8 4 4 0 0 1 0-8 M12 6v3 M12 15v3 M6 12h3 M15 12h3',ban:'M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20 M5 5l14 14',bot:'M5 7h14v13H5z M12 3v4 M9 12h.01 M15 12h.01 M9 17h6 M2 11v5 M22 11v5',arrow:'M5 12h14 M14 7l5 5-5 5'};
+paths.warehouse='M3 21V8l9-5 9 5v13 M7 21V11h10v10 M3 8h18 M10 15h4 M10 18h4';
 const icon=name=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${paths[name]||paths.grid}"/></svg>`;
 document.querySelectorAll('[data-icon]').forEach(e=>e.innerHTML=icon(e.dataset.icon));
 const cats={
@@ -13,6 +14,7 @@ server:{label:'Server & integraties',icon:'settings',group:'Discord',desc:'Serve
 tickets:{label:'Tickets & transcripts',icon:'ticket',group:'La Noche',desc:'Van openen en claimen tot sluiten en transcript.',actions:['Ticket geopend','Ticket geclaimd','Ticket gesloten','Transcript opgeslagen']},
 absence:{label:'Afwezigheid',icon:'calendar',group:'La Noche',desc:'Aanvragen, beoordelingen en automatische afloop.',actions:['Afwezigheid aangevraagd','Afwezigheid goedgekeurd','Afwezigheid afgekeurd','Afwezigheid afgelopen']},
 money:{label:'Potjes',icon:'money',group:'La Noche',desc:'Geld toegevoegd, opgenomen en gereset per potje.',actions:['Geld toegevoegd','Geld opgenomen','Potje gereset']},
+warehouses:{label:'Loodsen Logs',icon:'warehouse',group:'La Noche',desc:'Toevoegingen en verwijderingen van voorraad per loods.',actions:['Loodsvoorraad toegevoegd','Loodsvoorraad verwijderd']},
 vault:{label:'Kluis',icon:'vault',group:'La Noche',desc:'Geld, wapens, munitie en voorraadmutaties.',actions:['Kluisgeld toegevoegd','Voorraad opgenomen','Wapen toegevoegd','Munitie toegevoegd']},
 blacklist:{label:'Perm Blacklist',icon:'ban',group:'La Noche',desc:'Permanente blacklists en wijzigingen in toegang.',actions:['Perm Blacklist toegevoegd','Perm Blacklist verwijderd']},
 ranks:{label:'Gangleden & rangen',icon:'roles',group:'La Noche',desc:'Aannames, promoties, degradaties en ontslagen.',actions:['Lid aangenomen','Lid gepromoveerd','Lid gedegradeerd','Lid ontslagen']},
@@ -27,7 +29,7 @@ let theme=read('ln-theme','system');interval=read('ln-interval',10000);if(![5000
 function applyTheme(){document.documentElement.dataset.theme=document.documentElement.dataset.roster==='inner-circle'?'dark':theme==='system'?(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'):theme;}
 applyTheme();matchMedia('(prefers-color-scheme: light)').addEventListener('change',applyTheme);
 $('#themeToggle').onclick=()=>{theme=document.documentElement.dataset.theme==='light'?'dark':'light';localStorage.setItem('ln-theme',JSON.stringify(theme));applyTheme();};
-let identity=null,roster=null,vault=null,potsData=null,siteActivityData=null,siteActivityPage=1,siteVisitRecorded=false;
+let identity=null,roster=null,vault=null,potsData=null,siteActivityData=null,siteActivityPage=1,siteVisitRecorded=false,warehousesData=null;
 try{sessionStorage.removeItem('ln-connection');}catch{}
 if(location.hash.startsWith('#connect='))history.replaceState(null,'',location.pathname);
 function logoImage(img,url){img.src=url;img.onerror=()=>{img.onerror=null;img.src='/brand/logo.gif';};}
@@ -43,7 +45,7 @@ async function loadIdentity(){
   $('#authMessage').textContent=identity&&!allowed?`Je bent ingelogd als ${identity.name} (${identity.id}), maar dit Discord-ID heeft geen toegang. Vraag de beheerder om je ID toe te voegen.`:!me.configured?'Discord-login is nog niet geconfigureerd. De beheerder moet de OAuth-instellingen afronden.':errors[authError]||'Log in met Discord om het logdashboard te openen.';
   if(identity){$('#profileName').textContent=identity.name;$('#profileRole').textContent=identity.admin?'ᴅᴇᴠᴇʟᴏᴘᴍᴇɴᴛ':'Logtoegang';document.querySelectorAll('.profile-avatar').forEach(img=>{img.src=identity.avatar;});}
   $('#accountsButton').hidden=!identity?.admin;$('#siteActivityLink').hidden=!identity?.admin;
-  if(!allowed){delete document.documentElement.dataset.roster;data=null;roster=null;vault=null;siteActivityData=null;clearSiteActivity();$('#vaultContents').replaceChildren();$('#memberGroups').replaceChildren();closeDetail();render();clearTimeout(timer);}else{recordSiteVisit();route();}
+  if(!allowed){delete document.documentElement.dataset.roster;data=null;roster=null;vault=null;warehousesData=null;$('#warehouseContents').replaceChildren();siteActivityData=null;clearSiteActivity();$('#vaultContents').replaceChildren();$('#memberGroups').replaceChildren();closeDetail();render();clearTimeout(timer);}else{recordSiteVisit();route();}
  }catch{$('#authGate').hidden=false;$('#dashboard').hidden=true;$('#authMessage').textContent='De website is tijdelijk niet bereikbaar. Herlaad de pagina om opnieuw te proberen.';connection=null;data=null;clearTimeout(timer);}
 }
 async function logout(){
@@ -55,12 +57,12 @@ function status(message,online=false){$('#feedstate').textContent=message;$('.sa
 function bounds(){const p=$('#period').value;if(p==='hour')return Date.now()-3600000;if(p==='all')return 0;const now=new Date();now.setHours(0,0,0,0);return now.getTime();}
 function query(pageOverride=page){return new URLSearchParams({cat:active,action:actionFilter,q:$('#search').value.trim(),from:String(bounds()),period:$('#period').value,page:String(pageOverride)});}
 const canPage=id=>id==='siteactivity'?!!identity?.admin:!!identity?.pages?.includes(id);
-const pageRoute=id=>id==='siteactivity'?'#/siteactiviteit':id==='overview'?'#/overzicht':id==='roster'?'#/ledenlijst':id==='safe'?'#/kluis':id==='pots'?'#/potjes':'#/logs/'+id;
+const pageRoute=id=>id==='warehousestock'?'#/loodsen':id==='siteactivity'?'#/siteactiviteit':id==='overview'?'#/overzicht':id==='roster'?'#/ledenlijst':id==='safe'?'#/kluis':id==='pots'?'#/potjes':'#/logs/'+id;
 function hidePageLinks(){for(const a of document.querySelectorAll('a[href^="#/logs/"]'))a.hidden=!canPage(a.getAttribute('href').slice(7));}
 function nav(){
  const counts=Object.fromEntries((data?.counts||[]).map(c=>[c.cat,c.n]));let html='';
  if(canPage('overview'))html+=`<a class="navitem ${active==='all'?'active':''}" href="#/overzicht">${icon('grid')}<span class="navtext">Overzicht</span><span class="navcount">${data?Object.values(counts).reduce((a,b)=>a+b,0):'—'}</span></a>`;
- const special=[['roster','Live ledenlijst','users'],['safe','Kluisoverzicht','vault'],['pots','Potjesoverzicht','money']].filter(([id])=>canPage(id));
+ const special=[['roster','Live ledenlijst','users'],['safe','Kluisoverzicht','vault'],['pots','Potjesoverzicht','money'],['warehousestock','Loodsen','warehouse']].filter(([id])=>canPage(id));
  if(special.length)html+='<div class="navgroup">Organisatie</div>';
  for(const [id,label,ic] of special)html+=`<a class="navitem ${active===id?'active':''}" href="${pageRoute(id)}">${icon(ic)}<span class="navtext">${label}</span></a>`;
  for(const group of ['Discord','La Noche','Systeem']){const entries=Object.entries(cats).filter(([key,c])=>c.group===group&&canPage(key));if(!entries.length)continue;html+=`<div class="navgroup">${group}</div>`;for(const [key,c] of entries)html+=`<a class="navitem ${active===key?'active':''}" href="#/logs/${key}">${icon(c.icon)}<span class="navtext">${esc(c.label)}</span><span class="navcount">${data?counts[key]||0:'—'}</span></a>`;}
@@ -88,11 +90,12 @@ async function refresh(){
   try{const r=await fetch('/api/me',{cache:'no-store',credentials:'same-origin'});if(!r.ok)throw new Error();const me=await r.json();
    if(!me.user?.allowed){await loadIdentity();return;}
    if(JSON.stringify(me.user.pages)!==JSON.stringify(identity?.pages)){
-    identity=me.user;data=null;roster=null;vault=null;potsData=null;$('#memberGroups').replaceChildren();$('#vaultContents').replaceChildren();$('#potsContents').replaceChildren();closeDetail();route();return;
+    identity=me.user;data=null;roster=null;vault=null;potsData=null;warehousesData=null;$('#warehouseContents').replaceChildren();$('#memberGroups').replaceChildren();$('#vaultContents').replaceChildren();$('#potsContents').replaceChildren();closeDetail();route();return;
    }
   }catch{status('Verbinding onderbroken');clearTimeout(timer);if(!paused)timer=setTimeout(refresh,interval);return;}
  }
  if(active==='none'){clearTimeout(timer);if(connection&&!paused)timer=setTimeout(refresh,interval);return;}
+ if(active==='warehousestock')return refreshWarehouses();
  if(active==='siteactivity')return refreshSiteActivity();
  if(active==='pots')return refreshPots();
  if(active==='safe')return refreshVault();
@@ -107,22 +110,23 @@ async function refresh(){
  finally{clearTimeout(timeout);if(my===serial&&!paused&&connection)timer=setTimeout(refresh,interval);}
 }
 function route(){
- const m=location.hash.match(/^#\/logs\/(\w+)$/);active=location.hash==='#/siteactiviteit'?'siteactivity':location.hash==='#/potjes'?'pots':location.hash==='#/kluis'?'safe':location.hash==='#/ledenlijst'?'roster':m&&cats[m[1]]?m[1]:'all';actionFilter='all';page=1;data=null;$('#search').value='';
+ const m=location.hash.match(/^#\/logs\/(\w+)$/);active=location.hash==='#/loodsen'?'warehousestock':location.hash==='#/siteactiviteit'?'siteactivity':location.hash==='#/potjes'?'pots':location.hash==='#/kluis'?'safe':location.hash==='#/ledenlijst'?'roster':m&&cats[m[1]]?m[1]:'all';actionFilter='all';page=1;data=null;$('#search').value='';
  const requested=active==='all'?'overview':active;
  if(!canPage(requested)){
   const next=identity?.pages?.[0];if(next){location.hash=pageRoute(next);return;}
   active='none';
  }
+ const warehousesPage=active==='warehousestock';$('#warehousePanel').hidden=!warehousesPage;if(warehousesPage&&!warehousesData)$('#warehouseStatus').textContent='Loodsen laden…';
  const activityPage=active==='siteactivity';$('#siteActivityPanel').hidden=!activityPage;$('#siteActivityLink').classList.toggle('active',activityPage);
  const noPages=active==='none';$('#noPages').hidden=!noPages;$('#pause').hidden=noPages;
  const potsPage=active==='pots';$('#potsPanel').hidden=!potsPage;
  const vaultPage=active==='safe';$('#vaultPanel').hidden=!vaultPage;
  const rosterPage=active==='roster';document.documentElement.dataset.roster=rosterPage?'inner-circle':'';applyTheme();$('#themeToggle').hidden=rosterPage;$('#memberPanel').hidden=!rosterPage;if(rosterPage&&!roster)$('#memberStatus').textContent='Leden laden…';
- for(const sel of ['#stats','.insights','.logpanel','#connectionBanner'])$(sel).hidden=rosterPage||vaultPage||potsPage||activityPage||noPages;
- $('#export').hidden=rosterPage||vaultPage||potsPage||activityPage||noPages;
- $('.pagehead h1').innerHTML=(activityPage?'Siteactiviteit':noPages?'Jouw toegang':potsPage?'De potjes':vaultPage?'De kluis':rosterPage?'De Inner Circle':active==='all'?'Alles in beeld':esc(cats[active].label))+'<span>.</span>';
- $('.pagehead p').textContent=activityPage?'Wie de site bezoekt en met Discord inlogt. Alleen voor jou.':noPages?'Je account heeft nog geen toegestane pagina’s.':potsPage?'Elk potje in beeld. Saldo, verdeling en totaal.':vaultPage?'Geld en voorraad. Altijd het actuele totaal.':rosterPage?'Eén familie. Iedere rang op zijn plek. Rechtstreeks uit Discord.':active==='all'?'Elke geregistreerde actie. Eén overzicht.':cats[active].desc;
- $('.breadcrumb strong').textContent=activityPage?'Siteactiviteit':noPages?'Toegang':potsPage?'Potjesoverzicht':vaultPage?'Kluisoverzicht':rosterPage?'Ledenlijst':active==='all'?'Overzicht':cats[active].label;render();hidePageLinks();refresh();
+ for(const sel of ['#stats','.insights','.logpanel','#connectionBanner'])$(sel).hidden=rosterPage||vaultPage||potsPage||activityPage||warehousesPage||noPages;
+ $('#export').hidden=rosterPage||vaultPage||potsPage||activityPage||warehousesPage||noPages;
+ $('.pagehead h1').innerHTML=(warehousesPage?'De loodsen':activityPage?'Siteactiviteit':noPages?'Jouw toegang':potsPage?'De potjes':vaultPage?'De kluis':rosterPage?'De Inner Circle':active==='all'?'Alles in beeld':esc(cats[active].label))+'<span>.</span>';
+ $('.pagehead p').textContent=warehousesPage?'Alle voorraad per loods. Toevoegen, verwijderen en direct bijgewerkt.':activityPage?'Wie de site bezoekt en met Discord inlogt. Alleen voor jou.':noPages?'Je account heeft nog geen toegestane pagina’s.':potsPage?'Elk potje in beeld. Saldo, verdeling en totaal.':vaultPage?'Geld en voorraad. Altijd het actuele totaal.':rosterPage?'Eén familie. Iedere rang op zijn plek. Rechtstreeks uit Discord.':active==='all'?'Elke geregistreerde actie. Eén overzicht.':cats[active].desc;
+ $('.breadcrumb strong').textContent=warehousesPage?'Loodsen':activityPage?'Siteactiviteit':noPages?'Toegang':potsPage?'Potjesoverzicht':vaultPage?'Kluisoverzicht':rosterPage?'Ledenlijst':active==='all'?'Overzicht':cats[active].label;render();hidePageLinks();refresh();
 }
 function renderMembers(){
  const q=$('#memberSearch').value.trim().toLowerCase();let shown=0;
@@ -160,7 +164,7 @@ let searchTimer;$('#search').oninput=()=>{clearTimeout(searchTimer);searchTimer=
 $('#pause').onclick=()=>{paused=!paused;$('#pauseLabel').textContent=paused?'Gepauzeerd':'Live updates';$('#pause').querySelector('[data-icon]').innerHTML=icon(paused?'play':'pause');if(paused){clearTimeout(timer);status('Automatische updates gepauzeerd');}else refresh();};
 $('#settings').onclick=()=>{$('#theme').value=theme;$('#interval').value=String(interval);$('#preferences').showModal();};$('#closeprefs').onclick=()=>$('#preferences').close();$('#saveprefs').onclick=()=>{theme=$('#theme').value;interval=Number($('#interval').value);localStorage.setItem('ln-theme',JSON.stringify(theme));localStorage.setItem('ln-interval',JSON.stringify(interval));applyTheme();$('#preferences').close();refresh();};$('#disconnect').onclick=logout;
 $('#export').textContent='Exporteer deze pagina';$('#export').onclick=()=>{const cell=v=>'"'+String(v??'').replace(/^[=+@-]/,"'$&").replaceAll('"','""')+'"';const csv=['ID;Categorie;Actie;Uitvoerder;Lid;Kanaal;Tijd;Details',...data.logs.map(l=>[l.id,l.cat,l.action,l.actor,l.user,l.channel,new Date(l.time).toISOString(),l.detail].map(cell).join(';'))].join('\r\n');const url=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download='la-noche-logs-pagina-'+page+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);toast(`${data.logs.length} logs van deze pagina geëxporteerd`);};
-document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='k'){e.preventDefault();(active==='roster'?$('#memberSearch'):$('#search')).focus();}if(e.key==='Escape')closeDetail();if(e.key==='Tab'&&!$('#drawer').hidden){const items=$('#drawer').querySelectorAll('button,a');if(e.shiftKey&&document.activeElement===items[0]){e.preventDefault();items[items.length-1].focus();}else if(!e.shiftKey&&document.activeElement===items[items.length-1]){e.preventDefault();items[0].focus();}}});
+document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='k'){e.preventDefault();(active==='warehousestock'?$('#warehouseSearch'):active==='roster'?$('#memberSearch'):$('#search')).focus();}if(e.key==='Escape')closeDetail();if(e.key==='Tab'&&!$('#drawer').hidden){const items=$('#drawer').querySelectorAll('button,a');if(e.shiftKey&&document.activeElement===items[0]){e.preventDefault();items[items.length-1].focus();}else if(!e.shiftKey&&document.activeElement===items[items.length-1]){e.preventDefault();items[0].focus();}}});
 window.addEventListener('hashchange',route);$('#date').textContent=new Date().toLocaleDateString('nl-NL');$('#year').textContent=new Date().getFullYear();loadIdentity();
 
 let accountPageOptions=[];
@@ -303,7 +307,7 @@ function renderSiteActivity(){
  const activity=siteActivityData,events=activity.events||[],presence=activity.presence||[],now=activity.serverTime||Date.now();
  const when=value=>value?fmtTime(value):'—';
  const person=p=>`<div class="site-activity-person">${p.avatar?`<img src="${esc(p.avatar)}" alt="" loading="lazy">`:'<span class="site-activity-initial" aria-hidden="true">'+esc(String(p.name||p.user||'?').slice(0,2).toUpperCase())+'</span>'}<span><b>${esc(p.name||p.user||'Onbekend')}</b><small>${esc(p.user||'Geen Discord-ID vastgesteld')}</small></span></div>`;
- const pageName=value=>{if(!value)return '—';const id=String(value).replace(/^#\//,'').replace(/^logs\//,'');return ({overview:'Overzicht',overzicht:'Overzicht',roster:'Ledenlijst',ledenlijst:'Ledenlijst',safe:'Kluisoverzicht',kluis:'Kluisoverzicht',pots:'Potjesoverzicht',potjes:'Potjesoverzicht',siteactivity:'Siteactiviteit',siteactiviteit:'Siteactiviteit'})[id]||cats[id]?.label||String(value);};
+ const pageName=value=>{if(!value)return '—';const id=String(value).replace(/^#\//,'').replace(/^logs\//,'');return ({overview:'Overzicht',overzicht:'Overzicht',roster:'Ledenlijst',ledenlijst:'Ledenlijst',safe:'Kluisoverzicht',kluis:'Kluisoverzicht',pots:'Potjesoverzicht',potjes:'Potjesoverzicht',warehousestock:'Loodsen',loodsen:'Loodsen',siteactivity:'Siteactiviteit',siteactiviteit:'Siteactiviteit'})[id]||cats[id]?.label||String(value);};
  $('#siteActivityRecent').textContent=presence.filter(p=>p.lastSeen&&now-p.lastSeen<120000).length.toLocaleString('nl-NL');
  $('#siteActivityTotal').textContent=Number(activity.total||0).toLocaleString('nl-NL');
  $('#siteActivityTotalLabel').textContent=$('#siteActivityKind').value==='all'?'Alle opgeslagen gebeurtenissen':'Binnen de gekozen selectie';
@@ -333,3 +337,53 @@ async function refreshSiteActivity(){
 $('#siteActivityKind').onchange=()=>{siteActivityPage=1;refresh();};
 $('#siteActivityPrev').onclick=()=>{if(siteActivityPage>1){siteActivityPage--;refresh();}};
 $('#siteActivityNext').onclick=()=>{siteActivityPage++;refresh();};
+
+function renderWarehouses(){
+ if(!warehousesData)return;
+ const q=$('#warehouseSearch').value.trim().toLowerCase(),all=warehousesData.locations||[];
+ const locations=all.map(l=>({...l,items:(l.items||[]).filter(i=>!q||String(l.name).toLowerCase().includes(q)||String(i.item).toLowerCase().includes(q))})).filter(l=>l.items.length);
+ $('#warehouseAdd').hidden=!warehousesData.permissions?.manage;$('#warehouseRemove').hidden=!warehousesData.permissions?.manage;
+ $('#warehouseLocationCount').textContent=vaultNumber(all.length);$('#warehouseItemCount').textContent=vaultNumber(warehousesData.totalItems);$('#warehouseUnitCount').textContent=vaultNumber(warehousesData.totalUnits);
+ $('#warehouseContents').innerHTML=locations.map(l=>`<section class="panel warehouse-location"><div class="warehouse-location-head"><span class="warehouse-symbol">${icon('warehouse')}</span><div><h2>${esc(l.name)}</h2><p>${l.items.length} ${l.items.length===1?'productsoort':'productsoorten'}</p></div><span class="detailbadge">${vaultNumber(l.totalUnits??l.items.reduce((n,i)=>n+i.amount,0))} stuks</span></div><div class="warehouse-stock-head"><span>PRODUCT / VOORWERP</span><span>VOORRAAD</span></div>${l.items.map(i=>`<div class="warehouse-stock-row"><b>${esc(i.item)}</b><strong>${vaultNumber(i.amount)}<small>stuks</small></strong></div>`).join('')}</section>`).join('')||`<div class="panel warehouse-empty"><span class="warehouse-empty-icon">${icon('warehouse')}</span><h2>${q?'Geen voorraad gevonden':'De loodsen zijn nog leeg'}</h2><p>${q?'Zoek op een andere loods of productnaam.':'Voeg een eerste boeking toe om de voorraad per loods op te bouwen.'}</p>${warehousesData.permissions?.manage&&!q?'<button class="button accent" id="warehouseFirstAdd">Eerste voorraad toevoegen</button>':''}</div>`;
+ $('#warehouseFirstAdd')?.addEventListener('click',()=>openWarehouse('add'));
+ $('#warehouseStatus').textContent=`Bijgewerkt ${fmtTime(warehousesData.updatedAt)} · automatisch elke ${interval/1000} seconden`;
+ hidePageLinks();
+}
+async function refreshWarehouses(){
+ clearTimeout(timer);request?.abort();const my=++serial;if(!connection)return;
+ request=new AbortController();const timeout=setTimeout(()=>request?.abort(),15000);
+ try{
+  const r=await fetch('/api/warehouses',{credentials:'same-origin',cache:'no-store',signal:request.signal});const result=await r.json();if(my!==serial)return;
+  if(r.status===401||r.status===403){warehousesData=null;$('#warehouseContents').replaceChildren();await loadIdentity();return;}
+  if(!r.ok)throw new Error(result.error||'Loodsen tijdelijk niet beschikbaar.');warehousesData=result;renderWarehouses();status(paused?'Gepauzeerd':'Live · iedere '+interval/1000+' seconden',!paused);
+ }catch(e){if(my===serial){$('#warehouseStatus').textContent='Niet bijgewerkt — '+(warehousesData?'laatst ontvangen voorraad blijft zichtbaar. ':'')+(e.name==='AbortError'?'Probeer zo opnieuw.':e.message);status('Verbinding onderbroken');}}
+ finally{clearTimeout(timeout);if(my===serial&&!paused&&connection)timer=setTimeout(refresh,interval);}
+}
+$('#warehouseSearch').oninput=renderWarehouses;
+let warehouseMode='add',pendingWarehouse=null,warehouseBusy=false;
+function warehouseSuggestions(){
+ const locations=warehousesData?.locations||[];$('#warehouseLocations').innerHTML=locations.map(l=>`<option value="${esc(l.name)}"></option>`).join('');
+ const current=$('#warehouseLocation').value.trim().toLowerCase(),items=new Set(locations.filter(l=>!current||String(l.name).toLowerCase()===current).flatMap(l=>(l.items||[]).map(i=>i.item)));
+ $('#warehouseItems').innerHTML=[...items].map(item=>`<option value="${esc(item)}"></option>`).join('');
+}
+function openWarehouse(action){
+ warehouseMode=action;pendingWarehouse=null;$('#warehouseForm').reset();$('#warehouseDialogTitle').textContent=action==='add'?'Toevoegen aan loods':'Verwijderen uit loods';$('#warehouseDate').value=new Date().toLocaleDateString('sv-SE',{timeZone:'Europe/Amsterdam'});$('#warehouseForm').hidden=false;$('#warehousePreview').hidden=true;$('#warehouseConfirmActions').hidden=true;$('#warehouseMessage').textContent='';warehouseSuggestions();$('#warehouseDialog').showModal();
+}
+$('#warehouseAdd').onclick=()=>openWarehouse('add');$('#warehouseRemove').onclick=()=>openWarehouse('remove');$('#warehouseLocation').oninput=warehouseSuggestions;
+$('#warehouseClose').onclick=()=>{if(!warehouseBusy)$('#warehouseDialog').close();};$('#warehouseDialog').addEventListener('cancel',e=>{if(warehouseBusy)e.preventDefault();});
+$('#warehouseForm').onsubmit=async e=>{
+ e.preventDefault();if(warehouseBusy)return;warehouseBusy=true;$('#warehousePreviewButton').disabled=true;$('#warehouseMessage').textContent='Wijziging controleren…';
+ try{
+  const input={location:$('#warehouseLocation').value.trim(),item:$('#warehouseItem').value.trim(),amount:$('#warehouseAmount').value.trim(),action:warehouseMode,date:$('#warehouseDate').value.split('-').reverse().join('/'),reason:$('#warehouseReason').value.trim(),requestId:crypto.randomUUID()};
+  const result=await potPost('/api/warehouses/preview',input);pendingWarehouse=input;
+  $('#warehousePreview').innerHTML=`<div class="warehouse-preview-title"><span class="warehouse-symbol">${icon('warehouse')}</span><div><h3>${esc(result.location)}</h3><p>${esc(result.item)}</p></div></div><span class="detailbadge">${warehouseMode==='add'?'Toevoegen':'Verwijderen'} · ${esc(result.date)}</span><div class="vault-preview-numbers"><div><span>Huidige voorraad</span><b>${vaultNumber(result.before)} <small>stuks</small></b></div><div><span>Wijziging</span><b class="${warehouseMode==='add'?'in':'out'}">${result.delta<0?'−':'+'} ${vaultNumber(Math.abs(result.delta))}</b></div><div><span>Nieuwe voorraad</span><b>${vaultNumber(result.after)} <small>stuks</small></b></div></div><p class="vault-preview-reason"><b>Waarvoor / wat?</b>${esc(result.reason)}</p><p class="hint">De voorraad wordt bij bevestigen opnieuw gecontroleerd. De wijziging wordt opgeslagen in Loodsen Logs.</p>`;
+  $('#warehouseForm').hidden=true;$('#warehousePreview').hidden=false;$('#warehouseConfirmActions').hidden=false;$('#warehouseMessage').textContent='';
+ }catch(e){$('#warehouseMessage').textContent=e.name==='TimeoutError'?'De controle duurde te lang. Probeer opnieuw.':e.message;}finally{warehouseBusy=false;$('#warehousePreviewButton').disabled=false;}
+};
+$('#warehouseBack').onclick=()=>{if(warehouseBusy)return;pendingWarehouse=null;$('#warehouseForm').hidden=false;$('#warehousePreview').hidden=true;$('#warehouseConfirmActions').hidden=true;$('#warehouseMessage').textContent='';};
+$('#warehouseConfirm').onclick=async()=>{
+ if(warehouseBusy||!pendingWarehouse)return;warehouseBusy=true;$('#warehouseConfirm').disabled=true;$('#warehouseBack').disabled=true;$('#warehouseMessage').textContent='Boeking verwerken…';
+ try{const result=await potPost('/api/warehouses/book',pendingWarehouse);pendingWarehouse=null;$('#warehouseDialog').close();toast(result.changed?'Opgeslagen. De loodsvoorraad is bijgewerkt.':'Deze boeking was al opgeslagen.');await refresh();}
+ catch(e){$('#warehouseMessage').textContent=e.name==='TimeoutError'||e.message==='Failed to fetch'?'Geen bevestiging ontvangen. Klik opnieuw op bevestigen; dezelfde boeking wordt niet dubbel verwerkt.':e.message;}
+ finally{warehouseBusy=false;$('#warehouseConfirm').disabled=false;$('#warehouseBack').disabled=false;}
+};

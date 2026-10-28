@@ -1,3 +1,4 @@
+import {warehouseStore} from './warehouse-store.js';
 import {siteActivityStore} from './site-activity-store.js';
 import {logRetirementStore} from './log-retirement-store.js';
 import {logsiteAuthStore} from './logsite-auth-store.js';
@@ -43,6 +44,7 @@ export function createStore(directory) {
     backupLogDatabase(){const path=join(directory,'before-log-channel-retirement.sqlite');if(!existsSync(path))db.prepare('VACUUM INTO ?').run(path);},
     ...logsiteAuthStore(db),
     ...vaultStore(db),
+    ...warehouseStore(db),
     recordVault(id,guild,entry) {
       db.exec('BEGIN IMMEDIATE');
       try {

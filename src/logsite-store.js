@@ -1,5 +1,5 @@
 import {createHash,randomBytes} from 'node:crypto';
-export const logCategories=['messages','channels','roles','voice','members','moderation','server','tickets','absence','money','vault','blacklist','ranks','warns','commands','system'];
+export const logCategories=['messages','channels','roles','voice','members','moderation','server','tickets','absence','money','vault','blacklist','ranks','warns','commands','system','warehouses'];
 export function classifyLog(e) {
  if(logCategories.includes(e.cat))return e.cat;
  const t=(e.title||'').toLowerCase(),a=e.auditAction||(e.description||'').match(/\*\*Actie:\*\* (\w+)/)?.[1]||'';
@@ -30,7 +30,7 @@ export function logsiteStore(db){
  webSession(token){if(!/^[a-f0-9]{64}$/.test(token||''))return null;return db.prepare('SELECT guild,user,expires FROM web_sessions WHERE hash=? AND expires>?').get(hash(token),Date.now());},
  syncWebLogs(guild){
   let pending=false;
-  for(const table of ['server_logs','audit_outbox','money_transactions','vault_bookings','blacklist_logs']){
+  for(const table of ['server_logs','audit_outbox','money_transactions','vault_bookings','blacklist_logs','warehouse_bookings']){
    const key=`web-cursor:${guild}:${table}`;const cursor=Number(db.prepare('SELECT value FROM meta WHERE key=?').get(key)?.value||0);
    const rows=db.prepare(`SELECT rowid AS seq,* FROM ${table} WHERE guild=? AND rowid>? ORDER BY rowid LIMIT 500`).all(guild,cursor);
    db.exec('BEGIN IMMEDIATE');try{
@@ -40,6 +40,7 @@ export function logsiteStore(db){
      if(table==='audit_outbox')v={...e,cat:e.type==='ticket'?'tickets':'absence',action:actionNames[e.action]||e.action,detail:e.type==='ticket'?`Categorie: ${e.kind}\nAanvrager: ${e.user}\nBehandelaar: ${e.claimed||'Niet geclaimd'}\nUitvoerder: ${e.actor||'Automatisch'}`:`Reden: ${e.reason}\nVanaf: ${new Date(e.start).toISOString()}\nTot: ${new Date(e.end).toISOString()}\nBeoordelaar: ${e.actor||'Automatisch / nog niet beoordeeld'}`,transcript:e.transcript?e.channel:null};
      if(table==='money_transactions')v={id:r.id,cat:'money',time:r.time,actor:r.actor,action:({add:'Geld toegevoegd',remove:'Geld opgenomen',reset:'Potje gereset',opening:'Beginstand potjes'})[r.action]||r.action,channel:'potjes',detail:`Soort: ${r.kind}\nBedrag: ${r.amount}\nPotje: ${r.pot||'Alle / verdeling'}\nMutaties [gang, drugs, wapens]: ${r.deltas}`};
      if(table==='vault_bookings')v={...e,id:r.id,cat:'vault',action:e.action==='add'?'Kluis: toegevoegd':'Kluis: verwijderd',channel:'kluis',detail:`Soort: ${e.kind}\nVoorwerp: ${e.item||'Geld'}\nHoeveelheid: ${e.amount}\nBoekdatum: ${e.date||'—'}\nToelichting: ${e.reason||'—'}`,url:r.url};
+     if(table==='warehouse_bookings')v={...e,id:r.id,cat:'warehouses',action:e.action==='add'?'Loods: toegevoegd':'Loods: verwijderd',channel:e.location,detail:`Loods: ${e.location}\nProduct: ${e.item}\nAantal: ${e.amount}\nBoekdatum: ${e.date}\nToelichting: ${e.reason}`};
      if(table==='blacklist_logs')v={...e,cat:'blacklist',action:e.action==='toevoegen'?'Perm Blacklist toegevoegd':'Perm Blacklist verwijderd',detail:`Lid: ${e.user}\nUitvoerder: ${e.actor}`,channel:'permanent-blacklist'};
      put(guild,{...v,id:`${table}:${r.id}`});
     }
