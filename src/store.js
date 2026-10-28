@@ -1,3 +1,4 @@
+import {logsiteAuthStore} from './logsite-auth-store.js';
 import {logsiteStore} from './logsite-store.js';
 import {vaultStore} from './vault-store.js';
 import { moneyStore } from './money-store.js';
@@ -34,6 +35,7 @@ export function createStore(directory) {
   return {
     ...money,
     ...logsiteStore(db),
+    ...logsiteAuthStore(db),
     ...vaultStore(db),
     recordVault(id,guild,entry) {
       db.exec('BEGIN IMMEDIATE');

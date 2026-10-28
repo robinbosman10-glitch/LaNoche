@@ -31,16 +31,6 @@ test('server filtering, pagination, date bounds and action counts remain consist
  assert.equal(store.queryWebLogs('g',{q:"' OR 1=1--"}).total,0);
  assert.equal(store.queryWebLogs('g',{q:'Robin',ids:['u']}).total,123);
 }));
-test('API denies anonymous, cross origin, wrong guild and removed administrators',temporary(async store=>{
- let allowed=false;const member={permissions:{has:()=>allowed}};const guild={id:'g',members:{fetch:async()=>member,cache:new Map(),me:member},channels:{cache:new Map()},roles:{cache:new Map()}};
- const client={guilds:{cache:new Map([['g',guild]])},isReady:()=>true,users:{cache:new Map()},options:{intents:{has:()=>false}}};
- const api=createLogsiteApi(store,()=>client,'g');
- const call=async(headers={})=>{let code,body;await api({url:'/api/logsite',method:'GET',headers},{setHeader(){},writeHead(c){code=c;},end(b){body=b;}});return {code,body};};
- assert.equal((await call()).code,401);assert.equal((await call({origin:'https://evil.test'})).code,403);
- assert.equal((await call({authorization:'Bearer '+store.createWebSession('other','u')})).code,401);
- const token=store.createWebSession('g','u');assert.equal((await call({origin:dashboardOrigin,authorization:'Bearer '+token})).code,403);
- const api2=createLogsiteApi(store,()=>client,'g');allowed=true;let status;await api2({url:'/api/logsite',method:'GET',headers:{authorization:'Bearer '+token}},{setHeader(){},writeHead(c){status=c;},end(b){assert.doesNotMatch(b,new RegExp(token));}});assert.equal(status,200);
-}));
 test('audit classifications separate channel, moderation, role and message actions',()=>{
  assert.equal(classifyLog({auditAction:'MemberBanAdd'}),'moderation');assert.equal(classifyLog({auditAction:'MemberRoleUpdate'}),'roles');assert.equal(classifyLog({auditAction:'MessageDelete'}),'messages');assert.equal(classifyLog({auditAction:'ThreadDelete'}),'channels');
 });

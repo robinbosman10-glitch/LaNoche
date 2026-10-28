@@ -1,3 +1,4 @@
+import {createLogsiteAuth} from './logsite-auth.js';
 import {createLogHistory} from './logsite-history.js';
 import {createLogsiteApi,handleLogsite} from './logsite-api.js';
 import {syncChannelNames} from './channel-names.js';
@@ -32,7 +33,9 @@ catch (error) { console.error(error.message); process.exit(1); }
 
 const store = createStore(process.env.DATA_DIR || './data');
 transcriptBase(); // Validate configured public origin before publishing links.
-const web=createTranscriptServer(store,createLogsiteApi(store,()=>client,config.guildId));
+const logAuth=createLogsiteAuth(store,()=>client,config.guildId);
+const logApi=createLogsiteApi(store,()=>client,config.guildId);
+const web=createTranscriptServer(store,async(req,res)=>(await logAuth(req,res))||(await logApi(req,res)));
 web.on('error',()=>{console.error('Transcriptwebsite starten mislukt. Controleer PORT.');process.exit(1);});
 web.listen(Number(process.env.PORT||3000),'0.0.0.0');
 const intents=[GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages,GatewayIntentBits.GuildVoiceStates,GatewayIntentBits.GuildModeration,GatewayIntentBits.GuildMessageReactions,GatewayIntentBits.GuildInvites,GatewayIntentBits.GuildScheduledEvents,GatewayIntentBits.AutoModerationExecution];

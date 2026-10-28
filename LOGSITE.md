@@ -1,23 +1,33 @@
-# La Noche Logs
+# La Noche Logs — Discord-login
 
-Dashboard: https://la-noche-logs-preview.robinbosman10.chatgpt.site
+Productiedomein: **https://la-noche-logs.nl**. De website draait in dezelfde Railway-service als de bot, met dezelfde SQLite-opslag op `/data`. De oude Sites-preview is niet de productiehost voor Discord OAuth.
 
-Na deployment van de bot: gebruik `/logsite` als Discord-beheerder. De persoonlijke knop koppelt de website aan het bestaande Railway HTTPS-domein. Geen bottoken of extra Railway-secret nodig. Als er nog geen openbaar domein bestaat: Railway Settings → Networking → Generate Domain, daarna herstarten. `TRANSCRIPT_BASE_URL` kan als expliciete HTTPS-origin dienen.
+## Instellen
 
-## Toegang
+1. Railway-project `282dd411-bba0-4d8d-a3e6-974927b77a06`, service `6e672b8e-bdd3-4eb2-9056-0a8c73da650b`, environment `5a4e8761-80c0-49e6-ab4f-ceacb279b362`.
+2. Voeg bij Settings → Networking → Custom Domain `la-noche-logs.nl` toe aan de bestaande HTTP-poort (`PORT`, standaard 3000).
+3. Neem de routing- en eigendomsverificatie-DNS-records exact over uit Railway. Voor het hoofddomein is CNAME-flattening/ALIAS bij de DNS-provider nodig; verzin geen vast IP-adres.
+4. Voeg in de Discord Developer Portal, bij de bestaande botapp → OAuth2 → Redirects, exact toe:
+   `https://la-noche-logs.nl/auth/discord/callback`
+5. Zet in Railway `DISCORD_OAUTH_CLIENT_SECRET` op het OAuth2 Client Secret (niet de bottoken). `DISCORD_OAUTH_CLIENT_ID` mag expliciet worden ingesteld; anders gebruikt de app het application-ID van de ingelogde bot. `LOGSITE_BASE_URL` is standaard `https://la-noche-logs.nl`.
+6. Laat Railway de nieuwe versie deployen. Controleer dat het domein en certificaat actief zijn, klik op Inloggen met Discord en meld je aan als de vaste beheerder.
 
-De bot verstrekt alleen aan opnieuw gecontroleerde Administrators een willekeurige, leesbare sessie van 12 uur. De database bewaart uitsluitend de SHA-256-hash. Een nieuw `/logsite`-command trekt de vorige sessie van dezelfde persoon in. Het dashboard verwijdert de verbindingsgegevens direct uit het URL-fragment en bewaart ze alleen in sessionStorage van dat tabblad. Deel de persoonlijke link niet. API-verzoeken gebruiken een Authorization-header, niet een querystring. Geen CORS-toegang voor andere websites. De API controleert iedere 30 seconden opnieuw of de gebruiker nog Administrator is. De Site blijft daarnaast privé binnen Sites.
+Bewaar geen geheimen in GitHub, chats of screenshots. Zonder OAuth-configuratie blijft login gesloten en meldt de website dat de beheerder de instellingen moet afronden. De botfuncties blijven draaien.
 
-## Gegevens en dekking
+## Accountbeheer
 
-16 categorieën met databasefiltering, paginering en pollinterval 5/10/30 seconden. Export betreft expliciet de zichtbare pagina, maximaal 50 regels. CSV-formules en HTML worden ontsmet. Licht/donker/systeemvoorkeur wordt per browser onthouden.
+Enige beheerder: **424086753327054849**. Dit ID is vast in de servercode; het kan niet via de website worden gewijzigd of verwijderd. Discord-serverrollen, Administrator-rechten of aangeleverde browserheaders geven geen websitebeheer.
 
-De website leest bestaande server_logs, audit_outbox, money_transactions, vault_bookings en blacklist_logs zonder de saldi, tickets of Discord-berichten te wijzigen. Import is hervatbaar en idempotent. Nieuwe openingen/claims van tickets en succesvolle rang-/warnacties krijgen eigen registraties. Eerder geplaatste rang- en waarschuwingsembeds van deze bot worden langzaam ingelezen uit bereikbare tekstkanalen, maximaal twee pagina's per 30 seconden. Ontbrekende kanaaltoegang en voortgang verschijnen in het dashboard. Die historie-import verandert geen berichten.
+De beheerder ziet **Accounts beheren**. Voeg een Discord-ID toe om alleen leesrechten op alle logpagina's te geven. Verwijderen trekt toegang onmiddellijk in en verwijdert de actieve sessies van dat account. Ook iedere log-API-aanvraag controleert de actuele toegangslijst. Er is geen functie om andere beheerders te maken.
 
-Algemene events: berichten (maken/bewerken/verwijderen/bulk), reacties, voice/status, toetreden/vertrek, bijnamen, auditlogacties (onder andere rollen, kanalen, threads, bans/kicks/time-outs, serverinstellingen en integraties), AutoMod, serverevents, commandgebruik en botfouten. Gateway- en auditloggebeurtenissen kunnen beide dezelfde handeling beschrijven; het detail vermeldt de bron en de bekende uitvoerder. Commandgebruik betekent niet dat de opdracht geslaagd is; voltooide domeinacties staan in hun eigen categorie.
+OAuth gebruikt authorization code + PKCE en browsergebonden, eenmalige state van 10 minuten. Alleen `identify` wordt gevraagd. Discord bepaalt het ID; de browser mag het niet zelf opgeven voor authenticatie. OAuth-tokens blijven server-side en worden niet opgeslagen. Applicatiesessies verlopen na 12 uur; alleen de tokenhash wordt bewaard. De cookie heeft Secure, HttpOnly, SameSite=Lax en een __Host-prefix. Beheerwijzigingen en uitloggen vereisen same-origin plus een eigen CSRF-token.
 
-Discord blijft de bron van wat beschikbaar is. De site toont ontbrekende Auditlogboek bekijken- of Message Content Intent-toegang. Oude niet vastgelegde, gewiste berichten en voicegeschiedenis van vóór logging kunnen niet worden gereconstrueerd. Bots/webhooks worden niet als gewone chat gelogd om logloops te vermijden. Historische geldresets blijven zichtbaar als boekhoudkundige gebeurtenissen; er worden geen bedragen gereset door deze wijziging.
+Oude persoonlijke bearerlinks uit `/logsite` worden niet meer geaccepteerd door de API. `/logsite` geeft nu de gewone domeinlink aan toegelaten gebruikers, waarna altijd Discord-login nodig is.
 
-## Controle
+## Branding en logs
 
-`npm test` test onder meer sessierotatie, serverautorisatie, CORS, ledgerimport zonder dubbelen, filters en bestaande botfunctionaliteit. De uiteindelijke Railway-deploy en eerste verbinding via `/logsite` moeten online succesvol zijn voordat het dashboard als live geverifieerd geldt.
+Beide serverlogo's volgen het actuele servericoon uit Discord. Bij geen icoon wordt het bestaande La Noche-logo gebruikt. Na login staat linksonder de echte Discord-naam en avatar, met GIF-ondersteuning en correcte standaardavatar. Lichte/donkere/systeemweergave blijft beschikbaar.
+
+16 logpagina's, automatische verversing, zoeken, filters, details en pagina-export. Bestaande botregistraties worden hervatbaar en zonder dubbele invoer ingelezen. Oude eigen rang-/warnembeds worden in de achtergrond geïmporteerd. De website meldt ontbrekende auditlog- of berichtinhoudrechten. Niet eerder opgeslagen of gewiste gegevens zijn niet achteraf te reconstrueren.
+
+`npm test` controleert onder meer de vaste eigenaar, intrekken van toegang, OAuth-state/replay, cookies, CSRF, afwijzen van oude bearerlinks, avatars en de bestaande botfuncties.
