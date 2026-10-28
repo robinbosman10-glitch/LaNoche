@@ -117,3 +117,23 @@ test('pot overview reads actual split balances, withdrawals and resets without c
  const reset=await read();assert.equal(reset.pots[0].balances.wit,0);assert.equal(reset.pots[0].balances.zwart,100);assert.deepEqual(reset.pots.map(p=>p.shares),body.pots.map(p=>p.shares));
  assert.equal((await dispatch(api,'/api/pots','POST',headers)).status,405);
 }));
+test('website money operations reuse allocation and enforce role, CSRF, balance checks and idempotent retries',temporary(async store=>{
+ const {moneyRole,moneyResetRole}=await import('../src/money.js');
+ const client=mockClient(),guild=client.guilds.cache.get(G),roles=new Set([moneyRole]);guild.members.fetch=async()=>({roles:{cache:roles}});guild.members.cache.set(V,{roles:{cache:roles}});
+ store.changeLogsiteAccess(G,LOGSITE_OWNER,V,true);const token=store.loginLogsite(G,V,'Lead'),session=store.logsiteSession(token),headers={cookie:sessionCookie+'='+token,origin,'x-csrf-token':session.csrf,'content-type':'application/json'};
+ const api=createLogsiteApi(store,()=>client,G),send=(path,input,h=headers)=>dispatch(api,path,'POST',h,JSON.stringify(input));
+ const add={kind:'zwart',action:'add',amount:'101',requestId:'11111111-1111-4111-8111-111111111111'};
+ assert.equal((await send('/api/pots/book',add,{...headers,origin:'https://evil.test'})).status,403);
+ assert.equal((await send('/api/pots/book',add,{...headers,'x-csrf-token':'bad'})).status,403);
+ const preview=await send('/api/pots/preview',add);assert.equal(preview.status,200);assert.deepEqual(JSON.parse(preview.body).changes.map(c=>c.delta),[10,46,45]);assert.equal(store.moneyBalances(G).length,0);
+ const first=await send('/api/pots/book',add);assert.equal(first.status,200);assert.equal(JSON.parse(first.body).changed,true);
+ assert.equal(JSON.parse((await send('/api/pots/book',add)).body).changed,false);assert.equal(store.moneyBalances(G).reduce((n,b)=>n+b.amount,0),101);
+ assert.equal((await send('/api/pots/book',{...add,amount:'102'})).status,409);
+ const remove={...add,action:'remove',pot:'gang',amount:'10',requestId:'22222222-2222-4222-8222-222222222222'};
+ assert.equal((await send('/api/pots/book',{...remove,amount:'11'})).status,400);assert.equal((await send('/api/pots/book',remove)).status,200);assert.equal(JSON.parse((await send('/api/pots/book',remove)).body).changed,false);
+ roles.clear();assert.equal((await send('/api/pots/book',{...add,requestId:'33333333-3333-4333-8333-333333333333'})).status,403);
+ const reset={kind:'wit',action:'reset',pot:'all',requestId:'44444444-4444-4444-8444-444444444444'};assert.equal((await send('/api/pots/book',reset)).status,403);roles.add(moneyResetRole);
+ assert.equal((await send('/api/pots/book',reset)).status,200);assert.equal(store.moneyBalances(G).reduce((n,b)=>n+b.amount,0),0);assert.equal(JSON.parse((await send('/api/pots/book',reset)).body).changed,false);
+ assert.equal((await send('/api/pots/book',add)).status,403);
+ store.changeLogsiteAccess(G,LOGSITE_OWNER,V,false);assert.equal((await send('/api/pots/book',reset)).status,401);
+}));

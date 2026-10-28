@@ -1,3 +1,4 @@
+import {logsiteOrigin} from './logsite-auth.js';
 import {webOnlyLogs,deliverLogsToWebsite} from './log-destination.js';
 import {createHash} from 'node:crypto';
 import {ActionRowBuilder,ButtonBuilder,ButtonStyle,StringSelectMenuBuilder,ModalBuilder,TextInputBuilder,TextInputStyle,MessageFlags,PermissionFlagsBits as P} from 'discord.js';
@@ -23,6 +24,7 @@ export function moneyPayload(store,guild) {
     `**Zwart** · Gang ${shares.zwart[0]}% · Drugs ${shares.zwart[1]}% · Wapens ${shares.zwart[2]}%\n**Wit** · Gang ${shares.wit[0]}% · Drugs ${shares.wit[1]}% · Wapens ${shares.wit[2]}%`,false));
   const payload=branded(title,'Alle saldo’s op één plek. Beheer de potjes via de knop hieronder of **/geld**.',fields,'ticket-banner.gif','ticket-logo.gif');
   payload.embeds[0].setFooter({text:'LA NOCHE • Automatisch bijgewerkt'});
+  if(process.env.POT_MANAGEMENT==='web'){payload.embeds[0].setDescription('Alle saldo’s op één plek. Beheer de potjes op de website.');payload.components=[row(new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Potjes beheren op de site').setURL(logsiteOrigin()+'/#/potjes'))];return payload;}
   payload.components=[row(new ButtonBuilder().setCustomId('ln-money:start').setLabel('Geld beheren').setEmoji('💰').setStyle(ButtonStyle.Primary))];
   return payload;
 }
@@ -86,6 +88,7 @@ async function handleMoneyReset(i,guildId,store) {
   return i.editReply({content:`${changed?`${pot==='all'?'Alle potjes':names[pot]}: ${pot==='all'?'zwart en wit geld staan':`${kind} geld staat`} op 0. De percentages zijn behouden.`:'Deze reset was al verwerkt.'}${synced?'':' De reset is opgeslagen; het overzicht wordt automatisch opnieuw bijgewerkt.'}`,allowedMentions:{parse:[]}});
 }
 export async function handleMoney(i,guildId,store) {
+  if(process.env.POT_MANAGEMENT==='web')return i.reply({content:'Potjes beheren doe je voortaan via de website. Log in met Discord; je bestaande leiding- of resetrol bepaalt wat je mag doen.',flags:MessageFlags.Ephemeral,components:[row(new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Potjes openen').setURL(logsiteOrigin()+'/#/potjes'))]});
   if(i.commandName==='geldreset' || i.customId?.startsWith('ln-money:reset'))return handleMoneyReset(i,guildId,store);
   const respond=content=>i.reply({content,flags:MessageFlags.Ephemeral,allowedMentions:{parse:[]}});
   if(!i.inGuild() || i.guildId!==guildId) return respond('Dit paneel hoort bij La Noche.');

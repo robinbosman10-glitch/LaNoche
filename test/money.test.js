@@ -158,3 +158,12 @@ test('geldreset restricts both command and selection to the exact reset role',as
  assert.ok(s.moneyBalances('g').filter(b=>b.pot==='gang'&&b.kind==='wit').every(b=>b.amount===0));
  assert.equal(s.moneyBalances('g').find(b=>b.pot==='gang'&&b.kind==='zwart').amount,250000);
 });
+test('website mode redirects Discord commands and old controls without changing balances',async()=>{
+ const previous=process.env.POT_MANAGEMENT;process.env.POT_MANAGEMENT='web';
+ try{
+  const {handleMoney,moneyPayload}=await import('../src/money.js');let reply;
+  await handleMoney({commandName:'geld',reply:async p=>{reply=p;}},'g',{});
+  assert.match(reply.content,/website/);assert.equal(reply.components[0].components[0].data.url,'https://la-noche-logs.nl/#/potjes');
+  const panel=moneyPayload({moneyBalances:()=>[]},'g');assert.equal(panel.components[0].components[0].data.style,5);
+ }finally{if(previous===undefined)delete process.env.POT_MANAGEMENT;else process.env.POT_MANAGEMENT=previous;}
+});

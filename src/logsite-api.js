@@ -1,3 +1,4 @@
+import {handlePotsWrite,potPermissions} from './pots-web.js';
 import {pots,shares} from './money-store.js';
 import {LOGSITE_OWNER} from './logsite-auth-store.js';
 import {retirementKey} from './log-retirement.js';
@@ -16,9 +17,9 @@ export async function handleLogsite(i,store,guildId){
 export function createLogsiteApi(store,getClient,guildId){
  let busy=0;
  return async(req,res)=>{
-  const url=new URL(req.url,'http://localhost');if(!['/api/pots','/api/vault','/api/logsite','/api/members','/api/log-retirement','/api/log-attachment'].includes(url.pathname))return false;
+  const url=new URL(req.url,'http://localhost');if(!['/api/pots/preview','/api/pots/book','/api/pots','/api/vault','/api/logsite','/api/members','/api/log-retirement','/api/log-attachment'].includes(url.pathname))return false;
   const send=(status,data)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(data));return true;};
-  if(req.method!=='GET')return send(405,{error:'Alleen lezen toegestaan.'});
+  if(req.method!=='GET'&&!['/api/pots/preview','/api/pots/book'].includes(url.pathname))return send(405,{error:'Alleen lezen toegestaan.'});
   const session=currentLogsiteUser(req,store,guildId);
   if(!session)return send(401,{error:'Log eerst in met Discord.'});
   if(!store.logsiteAllowed(guildId,session.user))return send(403,{error:'Je Discord-ID heeft geen toegang tot deze website.'});
@@ -35,9 +36,10 @@ export function createLogsiteApi(store,getClient,guildId){
   if(busy>=3)return send(429,{error:'Te veel verzoeken. Probeer het zo opnieuw.'});
   busy++;
   try{
+   if(['/api/pots/preview','/api/pots/book'].includes(url.pathname))return await handlePotsWrite(req,send,store,guild,session,url.pathname);
    if(url.pathname==='/api/pots'){
     const balances=store.moneyBalances(guildId);
-    return send(200,{pots:pots.map((id,i)=>({id,balances:Object.fromEntries(['wit','zwart'].map(kind=>[kind,balances.find(b=>b.kind===kind&&b.pot===id)?.amount??0])),shares:Object.fromEntries(['wit','zwart'].map(kind=>[kind,shares[kind][i]]))})),updatedAt:Date.now()});
+    return send(200,{permissions:potPermissions(guild.members.cache.get(session.user)),pots:pots.map((id,i)=>({id,balances:Object.fromEntries(['wit','zwart'].map(kind=>[kind,balances.find(b=>b.kind===kind&&b.pot===id)?.amount??0])),shares:Object.fromEntries(['wit','zwart'].map(kind=>[kind,shares[kind][i]]))})),updatedAt:Date.now()});
    }
    if(url.pathname==='/api/vault'){
     const balances=store.vaultBalances(guildId);

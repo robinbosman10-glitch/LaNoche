@@ -84,6 +84,7 @@ export function moneyStore(db) {
     pendingMoneyLogs(guild) { return db.prepare('SELECT t.* FROM money_transactions t LEFT JOIN money_log_messages l ON l.id=t.id WHERE t.guild=? AND l.id IS NULL ORDER BY t.rowid LIMIT 50').all(guild); },
     markMoneyLogged(id,message) { db.prepare('INSERT OR IGNORE INTO money_log_messages VALUES (?,?)').run(id,message); },
     moneyBalances(guild) { return db.prepare('SELECT kind,pot,amount FROM money_balances WHERE guild=?').all(guild); },
+    moneyTransaction(id){return db.prepare('SELECT * FROM money_transactions WHERE id=?').get(id);},
     moneyHistory(guild) { return db.prepare('SELECT * FROM money_transactions WHERE guild=? ORDER BY rowid DESC LIMIT 5').all(guild); },
     changeMoney({id,guild,actor,kind,action,amount,pot}) {
       const split=allocation(amount,kind);
