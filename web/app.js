@@ -27,7 +27,7 @@ let theme=read('ln-theme','system');interval=read('ln-interval',10000);if(![5000
 function applyTheme(){document.documentElement.dataset.theme=theme==='system'?(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'):theme;}
 applyTheme();matchMedia('(prefers-color-scheme: light)').addEventListener('change',applyTheme);
 $('#themeToggle').onclick=()=>{theme=document.documentElement.dataset.theme==='light'?'dark':'light';localStorage.setItem('ln-theme',JSON.stringify(theme));applyTheme();};
-let identity=null;
+let identity=null,roster=null;
 try{sessionStorage.removeItem('ln-connection');}catch{}
 if(location.hash.startsWith('#connect='))history.replaceState(null,'',location.pathname);
 function logoImage(img,url){img.src=url;img.onerror=()=>{img.onerror=null;img.src='/brand/logo.gif';};}
@@ -43,7 +43,7 @@ async function loadIdentity(){
   $('#authMessage').textContent=identity&&!allowed?`Je bent ingelogd als ${identity.name} (${identity.id}), maar dit Discord-ID heeft geen toegang. Vraag de beheerder om je ID toe te voegen.`:!me.configured?'Discord-login is nog niet geconfigureerd. De beheerder moet de OAuth-instellingen afronden.':errors[authError]||'Log in met Discord om het logdashboard te openen.';
   if(identity){$('#profileName').textContent=identity.name;$('#profileRole').textContent=identity.admin?'Beheerder':'Logtoegang';document.querySelectorAll('.profile-avatar').forEach(img=>{img.src=identity.avatar;});}
   $('#accountsButton').hidden=!identity?.admin;
-  if(!allowed){data=null;closeDetail();render();clearTimeout(timer);}else route();
+  if(!allowed){data=null;roster=null;$('#memberGroups').replaceChildren();closeDetail();render();clearTimeout(timer);}else route();
  }catch{$('#authGate').hidden=false;$('#dashboard').hidden=true;$('#authMessage').textContent='De website is tijdelijk niet bereikbaar. Herlaad de pagina om opnieuw te proberen.';connection=null;data=null;clearTimeout(timer);}
 }
 async function logout(){
@@ -54,7 +54,7 @@ $('#gateLogout').onclick=logout;
 function status(message,online=false){$('#feedstate').textContent=message;$('.sample-label').textContent=online?'VERBONDEN':'NIET LIVE';document.documentElement.dataset.online=online?'yes':'no';}
 function bounds(){const p=$('#period').value;if(p==='hour')return Date.now()-3600000;if(p==='all')return 0;const now=new Date();now.setHours(0,0,0,0);return now.getTime();}
 function query(pageOverride=page){return new URLSearchParams({cat:active,action:actionFilter,q:$('#search').value.trim(),from:String(bounds()),period:$('#period').value,page:String(pageOverride)});}
-function nav(){const counts=Object.fromEntries((data?.counts||[]).map(c=>[c.cat,c.n]));let html=`<a class="navitem ${active==='all'?'active':''}" href="#/overzicht" title="Overzicht">${icon('grid')}<span class="navtext">Overzicht</span><span class="navcount">${data?Object.values(counts).reduce((a,b)=>a+b,0):'—'}</span></a>`;for(const group of ['Discord','La Noche','Systeem']){html+=`<div class="navgroup">${group}</div>`;for(const [key,c] of Object.entries(cats).filter(([,c])=>c.group===group))html+=`<a class="navitem ${active===key?'active':''}" href="#/logs/${key}" title="${esc(c.label)}">${icon(c.icon)}<span class="navtext">${esc(c.label)}</span><span class="navcount">${data?counts[key]||0:'—'}</span></a>`;}$('#nav').innerHTML=html;}
+function nav(){const counts=Object.fromEntries((data?.counts||[]).map(c=>[c.cat,c.n]));let html=`<a class="navitem ${active==='all'?'active':''}" href="#/overzicht" title="Overzicht">${icon('grid')}<span class="navtext">Overzicht</span><span class="navcount">${data?Object.values(counts).reduce((a,b)=>a+b,0):'—'}</span></a>`;html+=`<div class="navgroup">Organisatie</div><a class="navitem ${active==='roster'?'active':''}" href="#/ledenlijst" title="Live ledenlijst">${icon('users')}<span class="navtext">Live ledenlijst</span></a>`;for(const group of ['Discord','La Noche','Systeem']){html+=`<div class="navgroup">${group}</div>`;for(const [key,c] of Object.entries(cats).filter(([,c])=>c.group===group))html+=`<a class="navitem ${active===key?'active':''}" href="#/logs/${key}" title="${esc(c.label)}">${icon(c.icon)}<span class="navtext">${esc(c.label)}</span><span class="navcount">${data?counts[key]||0:'—'}</span></a>`;}$('#nav').innerHTML=html;}
 const fmtTime=t=>new Date(t).toLocaleString('nl-NL',{timeZone:'Europe/Amsterdam',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'});
 function render(){
  nav();const s=data?.stats;$('#stats').innerHTML=[['Logmomenten',s?.total,'In deze categorie en periode','chart'],['Uitvoerders / leden',s?.people,'Unieke geregistreerde personen','users'],['Afgelopen uur',s?.recent||0,'Binnen deze selectie','message'],['Soorten acties',s?.types,'Geregistreerde gebeurtenissen','grid']].map(([label,n,note,ic])=>`<article class="stat"><div class="stat-top">${label}${icon(ic)}</div><div class="stat-main"><div class="stat-value">${data?Number(n||0).toLocaleString('nl-NL'):'—'}</div></div><div class="stat-note">${note}</div></article>`).join('');
@@ -73,6 +73,7 @@ function banner(){
  b.innerHTML=`<b>${warnings.length?'Controleer logdekking':'Verbonden met '+esc(data.guild.name)}</b><p>${esc(warnings.join(' ')||c.history)} <span>Laatste synchronisatie: ${fmtTime(lastSuccess)}.</span></p>`;
 }
 async function refresh(){
+ if(active==='roster')return refreshMembers();
  clearTimeout(timer);request?.abort();const my=++serial;
  if(!connection){status('Log in met Discord');banner();render();return;}
  request=new AbortController();const timeout=setTimeout(()=>request?.abort(),15000);
@@ -82,7 +83,35 @@ async function refresh(){
  }catch(e){if(my!==serial)return;status('Verbinding onderbroken');$('#connectionBanner').hidden=false;$('#connectionBanner').innerHTML=`<b>Logs niet bijgewerkt</b><p>${esc(e.name==='AbortError'?'De bot reageert niet op tijd. Controleer of de Railway-deploy online is.':e.message==='Failed to fetch'?'De bot is niet bereikbaar. Probeer opnieuw of log opnieuw in.':e.message)} ${data?'De laatst ontvangen gegevens blijven zichtbaar.':''}</p>`;}
  finally{clearTimeout(timeout);if(my===serial&&!paused&&connection)timer=setTimeout(refresh,interval);}
 }
-function route(){const m=location.hash.match(/^#\/logs\/(\w+)$/);active=m&&cats[m[1]]?m[1]:'all';actionFilter='all';page=1;data=null;$('#search').value='';$('h1').innerHTML=(active==='all'?'Alles in beeld':esc(cats[active].label))+'<span>.</span>';$('.pagehead p').textContent=active==='all'?'Elke geregistreerde actie. Eén overzicht.':cats[active].desc;$('.breadcrumb strong').textContent=active==='all'?'Overzicht':cats[active].label;render();refresh();}
+function route(){
+ const m=location.hash.match(/^#\/logs\/(\w+)$/);active=location.hash==='#/ledenlijst'?'roster':m&&cats[m[1]]?m[1]:'all';actionFilter='all';page=1;data=null;$('#search').value='';
+ const rosterPage=active==='roster';$('#memberPanel').hidden=!rosterPage;if(rosterPage&&!roster)$('#memberStatus').textContent='Leden laden…';
+ for(const sel of ['#stats','.insights','.logpanel','#connectionBanner'])$(sel).hidden=rosterPage;
+ $('#export').hidden=rosterPage;
+ $('.pagehead h1').innerHTML=(rosterPage?'De familie':active==='all'?'Alles in beeld':esc(cats[active].label))+'<span>.</span>';
+ $('.pagehead p').textContent=rosterPage?'Alle gangleden, per hoogste rang. Rechtstreeks uit Discord.':active==='all'?'Elke geregistreerde actie. Eén overzicht.':cats[active].desc;
+ $('.breadcrumb strong').textContent=rosterPage?'Ledenlijst':active==='all'?'Overzicht':cats[active].label;render();refresh();
+}
+function renderMembers(){
+ const q=$('#memberSearch').value.trim().toLowerCase();let shown=0;
+ $('#memberGroups').innerHTML=(roster?.groups||[]).map(g=>{
+  const members=g.members.filter(m=>[m.name,m.username,m.id,g.name].some(v=>v.toLowerCase().includes(q)));shown+=members.length;if(q&&!members.length)return '';
+  return `<section class="panel rank-panel"><div class="rank-heading"><h2>${esc(g.name)}</h2><span class="countpill">${members.length}</span></div><div class="member-grid">${members.map(m=>`<article class="roster-member"><img src="${esc(m.avatar)}" alt="" loading="lazy"><div><b>${esc(m.name)}</b><small>@${esc(m.username)}</small><small>${esc(m.id)}</small>${m.absent?'<small class="absent">Goedgekeurd afwezig</small>':''}</div></article>`).join('')||'<p class="hint">Nog geen leden op deze rang.</p>'}</div></section>`;
+ }).join('')||'<p class="hint">Geen leden gevonden.</p>';
+ if(roster)$('#memberStatus').textContent=`${shown} van ${roster.total} leden · Bijgewerkt ${fmtTime(roster.updatedAt)}`;
+}
+async function refreshMembers(){
+ clearTimeout(timer);request?.abort();const my=++serial;if(!connection)return;
+ request=new AbortController();const timeout=setTimeout(()=>request?.abort(),15000);
+ try{
+  const r=await fetch('/api/members',{credentials:'same-origin',cache:'no-store',signal:request.signal});const result=await r.json();if(my!==serial)return;
+  if(r.status===401||r.status===403){roster=null;$('#memberGroups').replaceChildren();await loadIdentity();return;}
+  if(!r.ok)throw new Error(result.error||'Ledenlijst tijdelijk niet beschikbaar.');roster=result;renderMembers();status(paused?'Gepauzeerd':'Live · iedere '+interval/1000+' seconden',!paused);
+ }catch(e){if(my===serial){$('#memberStatus').textContent='Niet bijgewerkt — '+(roster?'laatste ontvangen lijst wordt getoond. ':'')+(e.name==='AbortError'?'Probeer zo opnieuw.':e.message);status('Verbinding onderbroken');}}
+ finally{clearTimeout(timeout);if(my===serial&&!paused&&connection)timer=setTimeout(refresh,interval);}
+}
+$('#memberSearch').oninput=renderMembers;
+
 function toast(t){$('#toast').textContent=t;$('#toast').classList.add('show');setTimeout(()=>$('#toast').classList.remove('show'),3000);}
 function openDetail(i){const l=data?.logs[i];if(!l)return;lastFocus=document.activeElement;const link=u=>{try{return new URL(u).protocol==='https:'?u:null;}catch{return null;}};$('#detail').innerHTML=`<h2 class="detailtitle">${esc(l.action)}</h2><span class="detailbadge">${esc(cats[l.cat]?.label)}</span><div class="detailrows">${[['Uitvoerder / lid',l.person],['Uitvoerder-ID',l.actor||'Niet vastgesteld'],['Betrokken lid-ID',l.user||'Niet vastgesteld'],['Kanaal / doel',l.channel],['Tijdstip',fmtTime(l.time)],['Bron',l.source],['Log-ID',l.id]].map(([k,v])=>`<div class="detailrow"><span>${k}</span><b>${esc(v)}</b></div>`).join('')}</div><div class="detailbody">${esc(l.detail).replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>')}</div>${link(l.transcript)?`<a class="button accent" href="${esc(l.transcript)}" target="_blank" rel="noopener noreferrer">Transcript openen ↗</a>`:''}${link(l.url)?`<a class="button" href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">Discord-bericht openen ↗</a>`:''}<button class="button" id="copy">Log kopiëren</button>`;$('#drawer').hidden=false;$('#overlay').hidden=false;$('.close').focus();$('#copy').onclick=async()=>{try{await navigator.clipboard.writeText(`${l.id}\n${l.action}\n${fmtTime(l.time)}\n${l.detail}`);toast('Log gekopieerd');}catch{toast('Kopiëren is niet toegestaan in deze browser.');}};}
 function closeDetail(){$('#drawer').hidden=true;$('#overlay').hidden=true;lastFocus?.focus();}
@@ -91,7 +120,7 @@ let searchTimer;$('#search').oninput=()=>{clearTimeout(searchTimer);searchTimer=
 $('#pause').onclick=()=>{paused=!paused;$('#pauseLabel').textContent=paused?'Gepauzeerd':'Live updates';$('#pause').querySelector('[data-icon]').innerHTML=icon(paused?'play':'pause');if(paused){clearTimeout(timer);status('Automatische updates gepauzeerd');}else refresh();};
 $('#settings').onclick=()=>{$('#theme').value=theme;$('#interval').value=String(interval);$('#preferences').showModal();};$('#closeprefs').onclick=()=>$('#preferences').close();$('#saveprefs').onclick=()=>{theme=$('#theme').value;interval=Number($('#interval').value);localStorage.setItem('ln-theme',JSON.stringify(theme));localStorage.setItem('ln-interval',JSON.stringify(interval));applyTheme();$('#preferences').close();refresh();};$('#disconnect').onclick=logout;
 $('#export').textContent='Exporteer deze pagina';$('#export').onclick=()=>{const cell=v=>'"'+String(v??'').replace(/^[=+@-]/,"'$&").replaceAll('"','""')+'"';const csv=['ID;Categorie;Actie;Uitvoerder;Lid;Kanaal;Tijd;Details',...data.logs.map(l=>[l.id,l.cat,l.action,l.actor,l.user,l.channel,new Date(l.time).toISOString(),l.detail].map(cell).join(';'))].join('\r\n');const url=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download='la-noche-logs-pagina-'+page+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);toast(`${data.logs.length} logs van deze pagina geëxporteerd`);};
-document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='k'){e.preventDefault();$('#search').focus();}if(e.key==='Escape')closeDetail();if(e.key==='Tab'&&!$('#drawer').hidden){const items=$('#drawer').querySelectorAll('button,a');if(e.shiftKey&&document.activeElement===items[0]){e.preventDefault();items[items.length-1].focus();}else if(!e.shiftKey&&document.activeElement===items[items.length-1]){e.preventDefault();items[0].focus();}}});
+document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='k'){e.preventDefault();(active==='roster'?$('#memberSearch'):$('#search')).focus();}if(e.key==='Escape')closeDetail();if(e.key==='Tab'&&!$('#drawer').hidden){const items=$('#drawer').querySelectorAll('button,a');if(e.shiftKey&&document.activeElement===items[0]){e.preventDefault();items[items.length-1].focus();}else if(!e.shiftKey&&document.activeElement===items[items.length-1]){e.preventDefault();items[0].focus();}}});
 window.addEventListener('hashchange',route);$('#date').textContent=new Date().toLocaleDateString('nl-NL');$('#year').textContent=new Date().getFullYear();loadIdentity();
 
 async function loadAccounts(){

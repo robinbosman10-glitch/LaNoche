@@ -31,3 +31,8 @@ Beide serverlogo's volgen het actuele servericoon uit Discord. Bij geen icoon wo
 16 logpagina's, automatische verversing, zoeken, filters, details en pagina-export. Bestaande botregistraties worden hervatbaar en zonder dubbele invoer ingelezen. Oude eigen rang-/warnembeds worden in de achtergrond geïmporteerd. De website meldt ontbrekende auditlog- of berichtinhoudrechten. Niet eerder opgeslagen of gewiste gegevens zijn niet achteraf te reconstrueren.
 
 `npm test` controleert onder meer de vaste eigenaar, intrekken van toegang, OAuth-state/replay, cookies, CSRF, afwijzen van oude bearerlinks, avatars en de bestaande botfuncties.
+
+
+## Live ledenlijst
+
+De pagina **Live ledenlijst** leest `/api/members` via dezelfde beveiligde Discord-sessie. Zij toont echte Discord-leden per hoogste ingestelde gangrang, van hoog naar laag, zonder bots of dubbeltellingen. Namen, avatars en goedgekeurde afwezigheid komen uit Discord. De gedeelde member-cache wordt aanvankelijk volledig geladen en daarna door Discord Gateway-events bijgewerkt. De site ververst standaard iedere 10 seconden; pauze en verversinterval gelden ook hier. Bij verbindingsproblemen wordt de laatst ontvangen lijst duidelijk als niet bijgewerkt gemarkeerd. Niet-ingelogde bezoekers krijgen geen ledengegevens.

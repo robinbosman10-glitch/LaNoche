@@ -1,3 +1,5 @@
+import {getMembers} from './member-cache.js';
+import {settings} from './settings.js';
 import {currentLogsiteUser,logsiteOrigin} from './logsite-auth.js';
 import {PermissionFlagsBits as P,GatewayIntentBits,ActionRowBuilder,ButtonBuilder,ButtonStyle} from 'discord.js';
 import {DateTime} from 'luxon';
@@ -11,7 +13,7 @@ export async function handleLogsite(i,store,guildId){
 export function createLogsiteApi(store,getClient,guildId){
  let busy=0;
  return async(req,res)=>{
-  const url=new URL(req.url,'http://localhost');if(url.pathname!=='/api/logsite')return false;
+  const url=new URL(req.url,'http://localhost');if(!['/api/logsite','/api/members'].includes(url.pathname))return false;
   const send=(status,data)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(data));return true;};
   if(req.method!=='GET')return send(405,{error:'Alleen lezen toegestaan.'});
   const session=currentLogsiteUser(req,store,guildId);
@@ -22,6 +24,16 @@ export function createLogsiteApi(store,getClient,guildId){
   if(busy>=3)return send(429,{error:'Te veel verzoeken. Probeer het zo opnieuw.'});
   busy++;
   try{
+   if(url.pathname==='/api/members'){
+    const members=await getMembers(guild);const ranks=[...settings.ranks].reverse();
+    const groups=ranks.map(id=>({id,name:guild.roles.cache.get(id)?.name||id,members:[]}));
+    for(const member of members.values()){
+     if(member.user.bot)continue;const index=ranks.findIndex(id=>member.roles.cache.has(id));if(index<0)continue;
+     groups[index].members.push({id:member.id,name:member.displayName,username:member.user.username,avatar:member.displayAvatarURL({size:64}),absent:member.roles.cache.has(settings.absenceRole)});
+    }
+    for(const group of groups)group.members.sort((a,b)=>a.name.localeCompare(b.name,'nl'));
+    return send(200,{groups,total:groups.reduce((n,g)=>n+g.members.length,0),updatedAt:Date.now()});
+   }
    const importing=store.syncWebLogs(guildId);
    const number=(name,def,min,max)=>{const n=Number(url.searchParams.get(name)??def);return Number.isFinite(n)?Math.max(min,Math.min(max,Math.floor(n))):def;};
    const result=store.queryWebLogs(guildId,{cat:url.searchParams.get('cat')||'all',action:url.searchParams.get('action')||'all',q:url.searchParams.get('q')||'',ids:[...guild.members.cache.values()].filter(m=>(m.displayName||'').toLowerCase().includes((url.searchParams.get('q')||'!').toLowerCase())).slice(0,100).map(m=>m.id),from:url.searchParams.get('period')==='today'?DateTime.now().setZone('Europe/Amsterdam').startOf('day').toMillis():number('from',0,0,Date.now()),to:number('to',Date.now(),0,Date.now()),page:number('page',1,1,1000000),limit:50});

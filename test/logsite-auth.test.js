@@ -64,3 +64,14 @@ test('public assets contain no logs and auth configuration fails closed without 
  assert.throws(()=>logsiteOrigin({LOGSITE_BASE_URL:'http://unsafe.test'}));
  assert.match(discordAvatar({id:LOGSITE_OWNER,avatar:null,discriminator:'0'}),/embed\/avatars\/\d.png/);
 }));
+
+test('live member list requires access, groups by highest rank, excludes bots and reflects member changes',temporary(async store=>{
+ const client=mockClient(),guild=client.guilds.cache.get(G);const high='1399490155194220614',low='1311587016928133160';
+ const make=(id,name,roles,bot=false)=>({id,displayName:name,user:{username:name,bot},roles:{cache:new Map(roles.map(r=>[r,{}]))},displayAvatarURL:()=>'/brand/logo.gif'});
+ guild.roles.cache.set(high,{name:'Boss'});guild.roles.cache.set(low,{name:'Nieuw'});guild.members.fetch=async()=>guild.members.cache;
+ guild.members.cache.set(V,make(V,'Robin',[high,low]));guild.members.cache.set(X,make(X,'Lid',[low,'1557648943565774878']));guild.members.cache.set('bot',make('bot','Bot',[high],true));
+ const api=createLogsiteApi(store,()=>client,G);assert.equal((await dispatch(api,'/api/members')).status,401);
+ const owner=store.loginLogsite(G,LOGSITE_OWNER,'Owner'),h={cookie:sessionCookie+'='+owner};let result=JSON.parse((await dispatch(api,'/api/members','GET',h)).body);
+ assert.equal(result.total,2);assert.equal(result.groups[0].id,high);assert.equal(result.groups[0].members.length,1);assert.equal(result.groups.at(-1).members.length,1);assert.equal(result.groups.at(-1).members[0].absent,true);
+ guild.members.cache.delete(X);result=JSON.parse((await dispatch(api,'/api/members','GET',h)).body);assert.equal(result.total,1);
+}));
