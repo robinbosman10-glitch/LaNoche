@@ -5,6 +5,7 @@ export function styledChannelName(label,emoji) {
  return `${emoji}┃${[...text].map(c=>alphabet.includes(c)?letters[alphabet.indexOf(c)]:c).join('')}`;
 }
 export const channelNames=new Map([
+ ['1564898831898779658',styledChannelName('all-logs','📋')],
  ['1564621640271265792',styledChannelName('geld-logs','💰')],
  ['1564635987160600707',styledChannelName('kluis-overzicht','🏦')],
  ['1564634188278267914',styledChannelName('kluis-logs','📋')],

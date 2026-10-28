@@ -85,7 +85,6 @@ export function installServerLogs(client,guildId,store,onError=()=>{}) {
   async start(guild) {
    const channel=await guild.channels.fetch(allLogsChannel);
    if(!channel?.send)throw new Error('All-logs kanaal ontbreekt');
-   if(channel.name!=='📋┃all-logs')await channel.setName('📋┃all-logs','Centraal logkanaal op verzoek van beheer');
    emit('🟢 Bot online','Algemene serverlogs worden hier verzameld.',{color:0x57f287});
    if(!guild.members.me?.permissions.has(P.ViewAuditLog))emit('⚠️ Auditlogtoegang ontbreekt','Geef de bot **Auditlogboek bekijken** voor kanaal-, rol-, kick- en overige beheerlogs.');
    await flushServerLogs(guild,store);
