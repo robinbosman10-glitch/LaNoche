@@ -1,3 +1,4 @@
+import {installServerLogs,flushServerLogs} from './server-logs.js';
 import {handleBlacklist,syncBlacklist,flushBlacklistLogs,syncBlacklistNotice} from './blacklist.js';
 import {handleVault,flushVaultLogs,flushVaultPosts,syncVault} from './vault.js';
 import {handleMoney,syncMoney,flushMoneyLogs} from './money.js';
@@ -12,7 +13,7 @@ import { syncApplicationLinks } from './applications.js';
 import { handleTicketInteraction, handleTicketMessage, syncTicketAccess } from './tickets.js';
 import { invalidateMembers } from './member-cache.js';
 import { existsSync } from 'node:fs';
-import { Client, Events, GatewayIntentBits, MessageFlags, ActivityType, REST, Routes, ApplicationFlagsBitField } from 'discord.js';
+import { Client, Events, GatewayIntentBits, MessageFlags, ActivityType, REST, Routes, ApplicationFlagsBitField, Partials } from 'discord.js';
 import { commands } from './commands.js';
 import { readConfig } from './config.js';
 import { handleInteraction } from './handler.js';
@@ -31,14 +32,15 @@ transcriptBase(); // Validate configured public origin before publishing links.
 const web=createTranscriptServer(store);
 web.on('error',()=>{console.error('Transcriptwebsite starten mislukt. Controleer PORT.');process.exit(1);});
 web.listen(Number(process.env.PORT||3000),'0.0.0.0');
-const intents=[GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages];
+const intents=[GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages,GatewayIntentBits.GuildVoiceStates,GatewayIntentBits.GuildModeration];
 try {
   const application=await new REST({version:'10'}).setToken(config.token).get(Routes.currentApplication());
   const flags=new ApplicationFlagsBitField(application.flags ?? 0);
   if(flags.any([ApplicationFlagsBitField.Flags.GatewayMessageContent,ApplicationFlagsBitField.Flags.GatewayMessageContentLimited])) intents.push(GatewayIntentBits.MessageContent);
   else console.warn('$delete staat uit: schakel Message Content Intent in de Developer Portal in en herstart de bot.');
 } catch { console.warn('Message Content Intent kon niet worden gecontroleerd; $delete is voorlopig uitgeschakeld.'); }
-const client = new Client({ intents, allowedMentions: { parse: [] } });
+const client = new Client({ intents, partials:[Partials.Message], allowedMentions: { parse: [] } });
+const serverLogs=installServerLogs(client,config.guildId,store,error=>console.error('Serverlogs plaatsen mislukt',error?.code??error?.name));
 let ready = false;
 let refreshTimer;
 let absenceTimer;
@@ -46,9 +48,10 @@ let auditTimer;
 let moneyTimer;
 let absenceRefreshing=false;
 let liveRefresh;
-function stop(code) { web.close(); clearInterval(moneyTimer); clearInterval(refreshTimer); clearInterval(absenceTimer); clearInterval(auditTimer); liveRefresh?.stop(); client.destroy(); store.close(); process.exit(code); }
+function stop(code) { serverLogs.stop(); web.close(); clearInterval(moneyTimer); clearInterval(refreshTimer); clearInterval(absenceTimer); clearInterval(auditTimer); liveRefresh?.stop(); client.destroy(); store.close(); process.exit(code); }
 function logError(label, error) {
   // Do not log request bodies, headers, tokens or interaction payloads.
+  serverLogs.error(label,error);
   console.error(`${label} (${error?.code ?? error?.name ?? 'onbekend'})`);
 }
 client.once(Events.ClientReady, async current => {
@@ -62,7 +65,9 @@ client.once(Events.ClientReady, async current => {
     store.beginMoneyLogReset(guild.id);
     store.initializeVault(guild.id);
     ready = true;
+    void serverLogs.start(guild).catch(error=>console.error('All logs starten mislukt',error?.code??error?.name));
     const refreshMoney=()=>Promise.all([
+      flushServerLogs(guild,store).catch(error=>console.error('Serverlogs plaatsen mislukt',error?.code??error?.name)),
       syncBlacklistNotice(guild,store).catch(error=>logError('Blacklistmelding plaatsen mislukt',error)),
       syncBlacklist(guild,store).catch(error=>logError('Blacklist bijwerken mislukt',error)).then(()=>flushBlacklistLogs(guild,store)).catch(error=>logError('Blacklistlogs plaatsen mislukt',error)),
       flushVaultPosts(guild,store).then(()=>flushVaultLogs(guild,store)).catch(error=>logError('Kluisberichten plaatsen mislukt',error)),
