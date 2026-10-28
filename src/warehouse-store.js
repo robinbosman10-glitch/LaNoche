@@ -9,6 +9,17 @@ export function warehouseStore(db){
  db.exec(`CREATE TABLE IF NOT EXISTS warehouse_balances(guild TEXT NOT NULL,location TEXT NOT NULL,item TEXT NOT NULL,amount INTEGER NOT NULL CHECK(amount>=0),PRIMARY KEY(guild,location,item));
  CREATE TABLE IF NOT EXISTS warehouse_bookings(id TEXT PRIMARY KEY,guild TEXT NOT NULL,payload TEXT NOT NULL);`);
  return {
+  useDefaultWarehouse(guild){
+   const key=`warehouse-default-location-2026-10-28:${guild}`;
+   db.exec('BEGIN IMMEDIATE');try{
+    if(db.prepare('SELECT 1 FROM meta WHERE key=?').get(key)){db.exec('COMMIT');return false;}
+    const rows=db.prepare('SELECT item,SUM(amount) amount FROM warehouse_balances WHERE guild=? GROUP BY item').all(guild);
+    if(rows.some(r=>!Number.isSafeInteger(r.amount)||r.amount>1e12))throw new UserError('De gezamenlijke voorraad overschrijdt de limiet. Er is niets gewijzigd.');
+    db.prepare('DELETE FROM warehouse_balances WHERE guild=?').run(guild);
+    for(const r of rows)db.prepare('INSERT INTO warehouse_balances VALUES(?,?,?,?)').run(guild,'loods',r.item,r.amount);
+    db.prepare('INSERT INTO meta VALUES(?,?)').run(key,'done');db.exec('COMMIT');return true;
+   }catch(e){db.exec('ROLLBACK');throw e;}
+  },
   warehouseBalances(guild){return db.prepare('SELECT location,item,amount FROM warehouse_balances WHERE guild=? ORDER BY location,item').all(guild);},
   warehouseBooking(id){const r=db.prepare('SELECT payload FROM warehouse_bookings WHERE id=?').get(id);return r?JSON.parse(r.payload):null;},
   bookWarehouse(id,guild,entry){

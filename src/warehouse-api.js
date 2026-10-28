@@ -12,6 +12,7 @@ export function createWarehouseApi(store,getClient,guildId){
   const session=currentLogsiteUser(req,store,guildId);if(!session)return send(401,{error:'Log eerst in met Discord.'});
   if(!store.logsiteAllowed(guildId,session.user)||!store.logsitePages(guildId,session.user).includes('warehousestock'))return send(403,{error:'Geen toegang tot Loodsen.'});
   const client=getClient(),guild=client?.guilds.cache.get(guildId);if(!guild||!client.isReady())return send(503,{error:'De bot maakt verbinding. Probeer zo opnieuw.'});
+  store.useDefaultWarehouse(guildId);
   if(path==='/api/warehouses'){
    if(req.method!=='GET')return send(405,{error:'Alleen lezen toegestaan.'});
    const rows=store.warehouseBalances(guildId).filter(r=>r.amount>0),locations=[];
@@ -28,17 +29,16 @@ export function createWarehouseApi(store,getClient,guildId){
    const member=await guild.members.fetch({user:session.user,force:true});
    if(!currentLogsiteUser(req,store,guildId)||!store.logsiteAllowed(guildId,session.user)||!store.logsitePages(guildId,session.user).includes('warehousestock'))return send(401,{error:'Je toegang is verlopen.'});
    if(!member.roles.cache.has(leadRole))return send(403,{error:'Alleen de leidingrol kan loodsenvoorraad beheren.'});
-   const location=warehouseName(input.location),item=warehouseName(input.item);
+   const location='loods',item=warehouseName(input.item);
    if(!['add','remove'].includes(input.action))return send(400,{error:'Kies toevoegen of verwijderen.'});
    if(typeof input.amount!=='string'||!/^\d+$/.test(input.amount.trim()))throw new UserError('Vul een positief heel aantal in.');
    const amount=Number(input.amount.trim());if(!Number.isSafeInteger(amount)||amount<=0||amount>1e12)throw new UserError('Vul een positief heel aantal in (maximaal 1 biljoen).');
    const date=typeof input.date==='string'?input.date.trim():'',parsed=DateTime.fromFormat(date,'dd/MM/yyyy',{zone:'Europe/Amsterdam'});
    if(!/^\d{2}\/\d{2}\/\d{4}$/.test(date)||!parsed.isValid||parsed.toFormat('dd/MM/yyyy')!==date)throw new UserError('Vul een geldige datum in.');
-   const reason=typeof input.reason==='string'?input.reason.trim():'';if(!reason||reason.length>500)throw new UserError('Vul een toelichting in van maximaal 500 tekens.');
-   const entry={location,item,amount,date,reason,action:input.action,actor:session.user},id=`web-warehouse:${guildId}:${session.user}:${input.requestId}`;
+   const entry={location,item,amount,date,action:input.action,actor:session.user},id=`web-warehouse:${guildId}:${session.user}:${input.requestId}`;
    if(path==='/api/warehouses/book'){
     if(!/^[a-f0-9-]{36}$/.test(input.requestId||''))throw new UserError('Open het formulier opnieuw.');
-    const old=store.warehouseBooking(id);if(old){if(['location','item','amount','date','reason','action'].some(k=>old[k]!==entry[k]))return send(409,{error:'Deze boeking hoort bij andere invoer. Open een nieuw formulier.'});return send(200,{ok:true,changed:false});}
+    const old=store.warehouseBooking(id);if(old){if(['item','amount','date','action'].some(k=>old[k]!==entry[k]))return send(409,{error:'Deze boeking hoort bij andere invoer. Open een nieuw formulier.'});return send(200,{ok:true,changed:false});}
    }
    const rows=store.warehouseBalances(guildId),before=rows.find(r=>r.location===location&&r.item===item)?.amount||0,delta=entry.action==='add'?amount:-amount,after=before+delta;
    if(after<0)throw new UserError('Onvoldoende voorraad van dit product in deze loods. Er is niets gewijzigd.');

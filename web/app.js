@@ -125,7 +125,7 @@ function route(){
  for(const sel of ['#stats','.insights','.logpanel','#connectionBanner'])$(sel).hidden=rosterPage||vaultPage||potsPage||activityPage||warehousesPage||noPages;
  $('#export').hidden=rosterPage||vaultPage||potsPage||activityPage||warehousesPage||noPages;
  $('.pagehead h1').innerHTML=(warehousesPage?'De loodsen':activityPage?'Siteactiviteit':noPages?'Jouw toegang':potsPage?'De potjes':vaultPage?'De kluis':rosterPage?'De Inner Circle':active==='all'?'Alles in beeld':esc(cats[active].label))+'<span>.</span>';
- $('.pagehead p').textContent=warehousesPage?'Alle voorraad per loods. Toevoegen, verwijderen en direct bijgewerkt.':activityPage?'Wie de site bezoekt en met Discord inlogt. Alleen voor jou.':noPages?'Je account heeft nog geen toegestane pagina’s.':potsPage?'Elk potje in beeld. Saldo, verdeling en totaal.':vaultPage?'Geld en voorraad. Altijd het actuele totaal.':rosterPage?'Eén familie. Iedere rang op zijn plek. Rechtstreeks uit Discord.':active==='all'?'Elke geregistreerde actie. Eén overzicht.':cats[active].desc;
+ $('.pagehead p').textContent=warehousesPage?'Alle voorraad in Loods. Toevoegen, verwijderen en direct bijgewerkt.':activityPage?'Wie de site bezoekt en met Discord inlogt. Alleen voor jou.':noPages?'Je account heeft nog geen toegestane pagina’s.':potsPage?'Elk potje in beeld. Saldo, verdeling en totaal.':vaultPage?'Geld en voorraad. Altijd het actuele totaal.':rosterPage?'Eén familie. Iedere rang op zijn plek. Rechtstreeks uit Discord.':active==='all'?'Elke geregistreerde actie. Eén overzicht.':cats[active].desc;
  $('.breadcrumb strong').textContent=warehousesPage?'Loodsen':activityPage?'Siteactiviteit':noPages?'Toegang':potsPage?'Potjesoverzicht':vaultPage?'Kluisoverzicht':rosterPage?'Ledenlijst':active==='all'?'Overzicht':cats[active].label;render();hidePageLinks();refresh();
 }
 function renderMembers(){
@@ -362,21 +362,20 @@ async function refreshWarehouses(){
 $('#warehouseSearch').oninput=renderWarehouses;
 let warehouseMode='add',pendingWarehouse=null,warehouseBusy=false;
 function warehouseSuggestions(){
- const locations=warehousesData?.locations||[];$('#warehouseLocations').innerHTML=locations.map(l=>`<option value="${esc(l.name)}"></option>`).join('');
- const current=$('#warehouseLocation').value.trim().toLowerCase(),items=new Set(locations.filter(l=>!current||String(l.name).toLowerCase()===current).flatMap(l=>(l.items||[]).map(i=>i.item)));
+ const items=new Set((warehousesData?.locations||[]).flatMap(l=>(l.items||[]).map(i=>i.item)));
  $('#warehouseItems').innerHTML=[...items].map(item=>`<option value="${esc(item)}"></option>`).join('');
 }
 function openWarehouse(action){
  warehouseMode=action;pendingWarehouse=null;$('#warehouseForm').reset();$('#warehouseDialogTitle').textContent=action==='add'?'Toevoegen aan loods':'Verwijderen uit loods';$('#warehouseDate').value=new Date().toLocaleDateString('sv-SE',{timeZone:'Europe/Amsterdam'});$('#warehouseForm').hidden=false;$('#warehousePreview').hidden=true;$('#warehouseConfirmActions').hidden=true;$('#warehouseMessage').textContent='';warehouseSuggestions();$('#warehouseDialog').showModal();
 }
-$('#warehouseAdd').onclick=()=>openWarehouse('add');$('#warehouseRemove').onclick=()=>openWarehouse('remove');$('#warehouseLocation').oninput=warehouseSuggestions;
+$('#warehouseAdd').onclick=()=>openWarehouse('add');$('#warehouseRemove').onclick=()=>openWarehouse('remove');
 $('#warehouseClose').onclick=()=>{if(!warehouseBusy)$('#warehouseDialog').close();};$('#warehouseDialog').addEventListener('cancel',e=>{if(warehouseBusy)e.preventDefault();});
 $('#warehouseForm').onsubmit=async e=>{
  e.preventDefault();if(warehouseBusy)return;warehouseBusy=true;$('#warehousePreviewButton').disabled=true;$('#warehouseMessage').textContent='Wijziging controleren…';
  try{
-  const input={location:$('#warehouseLocation').value.trim(),item:$('#warehouseItem').value.trim(),amount:$('#warehouseAmount').value.trim(),action:warehouseMode,date:$('#warehouseDate').value.split('-').reverse().join('/'),reason:$('#warehouseReason').value.trim(),requestId:crypto.randomUUID()};
+  const input={item:$('#warehouseItem').value.trim(),amount:$('#warehouseAmount').value.trim(),action:warehouseMode,date:$('#warehouseDate').value.split('-').reverse().join('/'),requestId:crypto.randomUUID()};
   const result=await potPost('/api/warehouses/preview',input);pendingWarehouse=input;
-  $('#warehousePreview').innerHTML=`<div class="warehouse-preview-title"><span class="warehouse-symbol">${icon('warehouse')}</span><div><h3>${esc(result.location)}</h3><p>${esc(result.item)}</p></div></div><span class="detailbadge">${warehouseMode==='add'?'Toevoegen':'Verwijderen'} · ${esc(result.date)}</span><div class="vault-preview-numbers"><div><span>Huidige voorraad</span><b>${vaultNumber(result.before)} <small>stuks</small></b></div><div><span>Wijziging</span><b class="${warehouseMode==='add'?'in':'out'}">${result.delta<0?'−':'+'} ${vaultNumber(Math.abs(result.delta))}</b></div><div><span>Nieuwe voorraad</span><b>${vaultNumber(result.after)} <small>stuks</small></b></div></div><p class="vault-preview-reason"><b>Waarvoor / wat?</b>${esc(result.reason)}</p><p class="hint">De voorraad wordt bij bevestigen opnieuw gecontroleerd. De wijziging wordt opgeslagen in Loodsen Logs.</p>`;
+  $('#warehousePreview').innerHTML=`<div class="warehouse-preview-title"><span class="warehouse-symbol">${icon('warehouse')}</span><div><h3>${esc(result.location)}</h3><p>${esc(result.item)}</p></div></div><span class="detailbadge">${warehouseMode==='add'?'Toevoegen':'Verwijderen'} · ${esc(result.date)}</span><div class="vault-preview-numbers"><div><span>Huidige voorraad</span><b>${vaultNumber(result.before)} <small>stuks</small></b></div><div><span>Wijziging</span><b class="${warehouseMode==='add'?'in':'out'}">${result.delta<0?'−':'+'} ${vaultNumber(Math.abs(result.delta))}</b></div><div><span>Nieuwe voorraad</span><b>${vaultNumber(result.after)} <small>stuks</small></b></div></div><p class="hint">De voorraad wordt bij bevestigen opnieuw gecontroleerd. De wijziging wordt opgeslagen in Loodsen Logs.</p>`;
   $('#warehouseForm').hidden=true;$('#warehousePreview').hidden=false;$('#warehouseConfirmActions').hidden=false;$('#warehouseMessage').textContent='';
  }catch(e){$('#warehouseMessage').textContent=e.name==='TimeoutError'?'De controle duurde te lang. Probeer opnieuw.':e.message;}finally{warehouseBusy=false;$('#warehousePreviewButton').disabled=false;}
 };

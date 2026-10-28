@@ -30,9 +30,9 @@ test('warehouse website requires page + fresh role + CSRF; preview no mutation a
  const api=createWarehouseApi(store,()=>client,G),logApi=createLogsiteApi(store,()=>client,G);assert.equal((await dispatch(api,'/api/warehouses')).status,401);
  store.changeLogsiteAccess(G,LOGSITE_OWNER,V,true,{label:'Lead',pages:['warehousestock','warehouses']});const token=store.loginLogsite(G,V,'Actual Discord'),session=store.logsiteSession(token),h={cookie:sessionCookie+'='+token,origin,'x-csrf-token':session.csrf,'content-type':'application/json'};
  const send=(path,e,headers=h)=>dispatch(api,path,'POST',headers,JSON.stringify(e));
- const input={location:'Cokeloods',item:'Goede cokezaadjes',amount:'722',action:'add',date:'28/10/2026',reason:'Nieuwe voorraad',requestId:'11111111-1111-4111-8111-111111111111'};
+ const input={item:'Goede cokezaadjes',amount:'722',action:'add',date:'28/10/2026',requestId:'11111111-1111-4111-8111-111111111111'};
  assert.equal((await send('/api/warehouses/book',input,{...h,origin:'https://evil.test'})).status,403);
- const preview=await send('/api/warehouses/preview',input);assert.equal(preview.status,200);assert.equal(JSON.parse(preview.body).after,722);assert.equal(store.warehouseBalances(G).length,0);
+ const preview=await send('/api/warehouses/preview',input);assert.equal(preview.status,200);assert.equal(JSON.parse(preview.body).after,722);assert.equal(JSON.parse(preview.body).location,'loods');assert.ok(!('reason' in JSON.parse(preview.body)));assert.equal(store.warehouseBalances(G).length,0);
  assert.equal((await send('/api/warehouses/book',input)).status,200);assert.equal(JSON.parse((await send('/api/warehouses/book',input)).body).changed,false);
  assert.equal((await send('/api/warehouses/book',{...input,amount:'723'})).status,409);
  const state=JSON.parse((await dispatch(api,'/api/warehouses','GET',h)).body);assert.equal(state.locations[0].items[0].amount,722);assert.equal(state.permissions.manage,true);
@@ -45,4 +45,14 @@ test('warehouse website requires page + fresh role + CSRF; preview no mutation a
  store.updateLogsiteAccount(G,LOGSITE_OWNER,V,'Lead',['warehouses']);assert.equal((await send('/api/warehouses/book',input)).status,403);assert.equal((await dispatch(api,'/api/warehouses','GET',h)).status,403);
  store.updateLogsiteAccount(G,LOGSITE_OWNER,V,'Lead',['warehousestock']);assert.equal((await dispatch(logApi,'/api/logsite?cat=warehouses','GET',h)).status,403);
  store.changeLogsiteAccess(G,LOGSITE_OWNER,V,false);assert.equal((await send('/api/warehouses/book',input)).status,401);
+}));
+test('fixed Loods combines existing balances once without changing stock totals or booking history',fixture(async store=>{
+ const e={item:'goede coke zaadjes',amount:722,action:'add',actor:V,time:Date.now(),date:'28/10/2026',reason:'Historische toelichting'};
+ store.bookWarehouse('coke',G,{...e,location:'Coke'});store.bookWarehouse('other-location',G,{...e,location:'andere locatie',amount:5});
+ store.bookWarehouse('other-guild','other',{...e,location:'Coke',amount:10});
+ assert.equal(store.useDefaultWarehouse(G),true);assert.deepEqual(store.warehouseBalances(G).map(r=>({...r})),[{location:'loods',item:'goede coke zaadjes',amount:727}]);
+ assert.equal(store.useDefaultWarehouse(G),false);assert.equal(store.warehouseBalances(G)[0].amount,727);assert.equal(store.warehouseBooking('coke').location,'coke');assert.equal(store.warehouseBooking('coke').reason,'Historische toelichting');
+ assert.equal(store.warehouseBalances('other')[0].location,'coke');store.syncWebLogs(G);assert.equal(store.queryWebLogs(G,{cat:'warehouses'}).total,2);
+ store.bookWarehouse('new-remove',G,{location:'loods',item:e.item,amount:2,action:'remove',actor:V,time:Date.now(),date:'28/10/2026'});store.syncWebLogs(G);
+ const log=store.queryWebLogs(G,{cat:'warehouses'}).logs.find(l=>l.id==='warehouse_bookings:new-remove');assert.doesNotMatch(log.detail,/Toelichting|undefined/);assert.equal(store.warehouseBalances(G)[0].amount,725);
 }));
