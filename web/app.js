@@ -43,7 +43,7 @@ async function loadIdentity(){
   $('#authMessage').textContent=identity&&!allowed?`Je bent ingelogd als ${identity.name} (${identity.id}), maar dit Discord-ID heeft geen toegang. Vraag de beheerder om je ID toe te voegen.`:!me.configured?'Discord-login is nog niet geconfigureerd. De beheerder moet de OAuth-instellingen afronden.':errors[authError]||'Log in met Discord om het logdashboard te openen.';
   if(identity){$('#profileName').textContent=identity.name;$('#profileRole').textContent=identity.admin?'Beheerder':'Logtoegang';document.querySelectorAll('.profile-avatar').forEach(img=>{img.src=identity.avatar;});}
   $('#accountsButton').hidden=!identity?.admin;
-  if(!allowed){data=null;roster=null;vault=null;$('#vaultContents').replaceChildren();$('#memberGroups').replaceChildren();closeDetail();render();clearTimeout(timer);}else route();
+  if(!allowed){delete document.documentElement.dataset.roster;data=null;roster=null;vault=null;$('#vaultContents').replaceChildren();$('#memberGroups').replaceChildren();closeDetail();render();clearTimeout(timer);}else route();
  }catch{$('#authGate').hidden=false;$('#dashboard').hidden=true;$('#authMessage').textContent='De website is tijdelijk niet bereikbaar. Herlaad de pagina om opnieuw te proberen.';connection=null;data=null;clearTimeout(timer);}
 }
 async function logout(){
@@ -115,20 +115,28 @@ function route(){
  const noPages=active==='none';$('#noPages').hidden=!noPages;$('#pause').hidden=noPages;
  const potsPage=active==='pots';$('#potsPanel').hidden=!potsPage;
  const vaultPage=active==='safe';$('#vaultPanel').hidden=!vaultPage;
- const rosterPage=active==='roster';$('#memberPanel').hidden=!rosterPage;if(rosterPage&&!roster)$('#memberStatus').textContent='Leden laden…';
+ const rosterPage=active==='roster';document.documentElement.dataset.roster=rosterPage?'inner-circle':'';$('#memberPanel').hidden=!rosterPage;if(rosterPage&&!roster)$('#memberStatus').textContent='Leden laden…';
  for(const sel of ['#stats','.insights','.logpanel','#connectionBanner'])$(sel).hidden=rosterPage||vaultPage||potsPage||noPages;
  $('#export').hidden=rosterPage||vaultPage||potsPage||noPages;
- $('.pagehead h1').innerHTML=(noPages?'Jouw toegang':potsPage?'De potjes':vaultPage?'De kluis':rosterPage?'De familie':active==='all'?'Alles in beeld':esc(cats[active].label))+'<span>.</span>';
- $('.pagehead p').textContent=noPages?'Je account heeft nog geen toegestane pagina’s.':potsPage?'Elk potje in beeld. Saldo, verdeling en totaal.':vaultPage?'Geld en voorraad. Altijd het actuele totaal.':rosterPage?'Alle gangleden, per hoogste rang. Rechtstreeks uit Discord.':active==='all'?'Elke geregistreerde actie. Eén overzicht.':cats[active].desc;
+ $('.pagehead h1').innerHTML=(noPages?'Jouw toegang':potsPage?'De potjes':vaultPage?'De kluis':rosterPage?'De Inner Circle':active==='all'?'Alles in beeld':esc(cats[active].label))+'<span>.</span>';
+ $('.pagehead p').textContent=noPages?'Je account heeft nog geen toegestane pagina’s.':potsPage?'Elk potje in beeld. Saldo, verdeling en totaal.':vaultPage?'Geld en voorraad. Altijd het actuele totaal.':rosterPage?'Eén familie. Iedere rang op zijn plek. Rechtstreeks uit Discord.':active==='all'?'Elke geregistreerde actie. Eén overzicht.':cats[active].desc;
  $('.breadcrumb strong').textContent=noPages?'Toegang':potsPage?'Potjesoverzicht':vaultPage?'Kluisoverzicht':rosterPage?'Ledenlijst':active==='all'?'Overzicht':cats[active].label;render();hidePageLinks();refresh();
 }
 function renderMembers(){
  const q=$('#memberSearch').value.trim().toLowerCase();let shown=0;
- $('#memberGroups').innerHTML=(roster?.groups||[]).map(g=>{
-  const members=g.members.filter(m=>[m.name,m.username,m.id,g.name].some(v=>v.toLowerCase().includes(q)));shown+=members.length;if(q&&!members.length)return '';
-  return `<section class="panel rank-panel"><div class="rank-heading"><h2>${esc(g.name)}</h2><span class="countpill">${members.length}</span></div><div class="member-grid">${members.map(m=>`<article class="roster-member"><img src="${esc(m.avatar)}" alt="" loading="lazy"><div><b>${esc(m.name)}</b><small>@${esc(m.username)}</small><small>${esc(m.id)}</small>${m.absent?'<small class="absent">Goedgekeurd afwezig</small>':''}</div></article>`).join('')||'<p class="hint">Nog geen leden op deze rang.</p>'}</div></section>`;
- }).join('')||'<p class="hint">Geen leden gevonden.</p>';
- if(roster)$('#memberStatus').textContent=`${shown} van ${roster.total} leden · Bijgewerkt ${fmtTime(roster.updatedAt)}`;
+ const groups=(roster?.groups||[]).map((g,index)=>{const members=g.members.filter(m=>[m.name,m.username,m.id,g.name].some(v=>String(v).toLowerCase().includes(q)));shown+=members.length;return {...g,index,members};});
+ if(!roster){$('#memberGroups').innerHTML='<div class="ic-loading">De familie wordt opgehaald…</div>';return;}
+ const groupName=g=>g?.name||'Rang';
+ const memberBadge=m=>m.absent?'<span class="ic-absent">Goedgekeurd afwezig</span>':'';
+ const avatar=(m,style='')=>`<img class="ic-avatar ${style}" src="${esc(m.avatar)}" alt="" loading="lazy">`;
+ const member=(m,g,chief=false)=>`<article class="ic-member ${chief?'ic-chief':''}">${chief?'<span class="ic-chief-crown" aria-hidden="true">♛</span>':''}${avatar(m)}<div class="ic-member-copy"><b>${esc(m.name)}</b>${chief?`<span class="ic-chief-rank">${esc(groupName(g))}</span>`:''}<small>@${esc(m.username)}</small>${memberBadge(m)}<small class="ic-discord-id">${esc(m.id)}</small></div></article>`;
+ const highest=groups[0],lead=groups.slice(1,4),family=groups.slice(4);
+ const logo=$('.brand-logo.server-logo')?.src||'/brand/logo.gif';
+ const chiefHtml=highest?.members.map(m=>member(m,highest,true)).join('')||`<p class="ic-empty">${q?'Geen leden op deze rang in je zoekresultaten.':'Deze rang heeft nog geen leden.'}</p>`;
+ const leaders=lead.filter(g=>!q||g.members.length).map(g=>`<section class="ic-lead-rank"><div class="ic-lead-rank-label"><span>${esc(groupName(g))}</span><small>${g.members.length} ${g.members.length===1?'lid':'leden'}</small></div><div class="ic-lead-members">${g.members.map(m=>member(m,g)).join('')||'<p class="ic-empty">Nog geen leden op deze rang.</p>'}</div></section>`).join('')||'<p class="ic-empty">Geen leiding gevonden voor je zoekopdracht.</p>';
+ const lower=family.filter(g=>!q||g.members.length).map(g=>`<section class="ic-family-rank"><div class="ic-family-rank-head"><span class="ic-rank-symbol" aria-hidden="true">${['✦','◈','◇','○'][g.index-4]||'◇'}</span><div><h3>${esc(groupName(g))}</h3><small>${g.members.length} ${g.members.length===1?'lid':'leden'}</small></div></div><div class="ic-family-members">${g.members.map(m=>member(m,g)).join('')||'<p class="ic-empty">Nog geen leden op deze rang.</p>'}</div></section>`).join('')||'<p class="ic-empty">Geen familieleden gevonden voor je zoekopdracht.</p>';
+ $('#memberGroups').innerHTML=shown?`<div class="ic-top"><section class="ic-patrons" aria-label="Hoogste rang"><div class="ic-seal" aria-hidden="true"><span class="ic-seal-top">LA NOCHE</span><div class="ic-seal-core"><img src="${esc(logo)}" alt=""></div><span class="ic-seal-bottom">FAMILIA · SIEMPRE JUNTO</span><span class="ic-branch ic-branch-left">❧</span><span class="ic-branch ic-branch-right">❧</span></div><div class="ic-chiefs">${chiefHtml}</div></section><section class="ic-leadership"><div class="ic-panel-heading"><div><span class="ic-kicker">VERTROUWD. VERBONDEN.</span><h2>De <em>leiding.</em></h2></div><span class="ic-heading-mark" aria-hidden="true">♛</span></div>${leaders}</section></div><section class="ic-family"><div class="ic-family-heading"><h2>De <em>familie.</em></h2><span>${shown} ${q?'gevonden':'leden'} <i>·</i> ${groups.length} rangen</span></div><div class="ic-family-grid">${lower}</div></section>`:'<div class="ic-no-results"><span aria-hidden="true">◇</span><h2>Geen leden gevonden.</h2><p>Probeer een andere naam, Discord-ID of rang.</p></div>';
+ $('#memberStatus').textContent=`${shown} van ${roster.total} leden · Bijgewerkt ${fmtTime(roster.updatedAt)}`;
 }
 async function refreshMembers(){
  clearTimeout(timer);request?.abort();const my=++serial;if(!connection)return;
