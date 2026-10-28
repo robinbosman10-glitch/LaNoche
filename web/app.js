@@ -65,7 +65,7 @@ function nav(){
  const special=[['roster','Live ledenlijst','users'],['safe','Kluisoverzicht','vault'],['pots','Potjesoverzicht','money'],['warehousestock','Loodsen','warehouse']].filter(([id])=>canPage(id));
  if(special.length)html+='<div class="navgroup">Organisatie</div>';
  for(const [id,label,ic] of special)html+=`<a class="navitem ${active===id?'active':''}" href="${pageRoute(id)}">${icon(ic)}<span class="navtext">${label}</span></a>`;
- for(const group of ['Discord','La Noche','Systeem']){const entries=Object.entries(cats).filter(([key,c])=>c.group===group&&canPage(key));if(!entries.length)continue;html+=`<div class="navgroup">${group}</div>`;for(const [key,c] of entries)html+=`<a class="navitem ${active===key?'active':''}" href="#/logs/${key}">${icon(c.icon)}<span class="navtext">${esc(c.label)}</span><span class="navcount">${data?counts[key]||0:'—'}</span></a>`;}
+ for(const group of ['Discord','La Noche']){const entries=Object.entries(cats).filter(([key,c])=>c.group===group&&canPage(key));if(!entries.length)continue;html+=`<div class="navgroup">${group}</div>`;for(const [key,c] of entries)html+=`<a class="navitem ${active===key?'active':''}" href="#/logs/${key}">${icon(c.icon)}<span class="navtext">${esc(c.label)}</span><span class="navcount">${data?counts[key]||0:'—'}</span></a>`;}
  $('#nav').innerHTML=html;
 }
 const fmtTime=t=>new Date(t).toLocaleString('nl-NL',{timeZone:'Europe/Amsterdam',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'});
