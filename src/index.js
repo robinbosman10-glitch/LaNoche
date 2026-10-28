@@ -1,3 +1,4 @@
+import {syncChannelNames} from './channel-names.js';
 import {installServerLogs,flushServerLogs} from './server-logs.js';
 import {handleBlacklist,syncBlacklist,flushBlacklistLogs,syncBlacklistNotice} from './blacklist.js';
 import {handleVault,flushVaultLogs,flushVaultPosts,syncVault} from './vault.js';
@@ -67,6 +68,7 @@ client.once(Events.ClientReady, async current => {
     ready = true;
     void serverLogs.start(guild).catch(error=>console.error('All logs starten mislukt',error?.code??error?.name));
     const refreshMoney=()=>Promise.all([
+      syncChannelNames(guild,store).catch(error=>logError('Kanaalnamen aanpassen mislukt',error)),
       flushServerLogs(guild,store).catch(error=>console.error('Serverlogs plaatsen mislukt',error?.code??error?.name)),
       syncBlacklistNotice(guild,store).catch(error=>logError('Blacklistmelding plaatsen mislukt',error)),
       syncBlacklist(guild,store).catch(error=>logError('Blacklist bijwerken mislukt',error)).then(()=>flushBlacklistLogs(guild,store)).catch(error=>logError('Blacklistlogs plaatsen mislukt',error)),
