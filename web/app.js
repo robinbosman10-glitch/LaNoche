@@ -41,7 +41,7 @@ async function loadIdentity(){
   const authError=new URLSearchParams(location.search).get('auth');
   const errors={invalid:'De inlogpoging is verlopen. Probeer opnieuw.',cancelled:'Discord-login geannuleerd.',failed:'Inloggen is niet gelukt. Probeer opnieuw.',unconfigured:'Discord-login wordt nog ingesteld door de beheerder.'};
   $('#authMessage').textContent=identity&&!allowed?`Je bent ingelogd als ${identity.name} (${identity.id}), maar dit Discord-ID heeft geen toegang. Vraag de beheerder om je ID toe te voegen.`:!me.configured?'Discord-login is nog niet geconfigureerd. De beheerder moet de OAuth-instellingen afronden.':errors[authError]||'Log in met Discord om het logdashboard te openen.';
-  if(identity){$('#profileName').textContent=identity.name;$('#profileRole').textContent=identity.admin?'Beheerder':'Logtoegang';document.querySelectorAll('.profile-avatar').forEach(img=>{img.src=identity.avatar;});}
+  if(identity){$('#profileName').textContent=identity.name;$('#profileRole').textContent=identity.admin?'ᴅᴇᴠᴇʟᴏᴘᴍᴇɴᴛ':'Logtoegang';document.querySelectorAll('.profile-avatar').forEach(img=>{img.src=identity.avatar;});}
   $('#accountsButton').hidden=!identity?.admin;
   if(!allowed){delete document.documentElement.dataset.roster;data=null;roster=null;vault=null;$('#vaultContents').replaceChildren();$('#memberGroups').replaceChildren();closeDetail();render();clearTimeout(timer);}else route();
  }catch{$('#authGate').hidden=false;$('#dashboard').hidden=true;$('#authMessage').textContent='De website is tijdelijk niet bereikbaar. Herlaad de pagina om opnieuw te proberen.';connection=null;data=null;clearTimeout(timer);}
