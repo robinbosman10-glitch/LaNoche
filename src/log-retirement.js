@@ -44,13 +44,13 @@ export function createLogRetirement(guild,store,{download=downloadAttachment}={}
      const head=await channel.messages.fetch({limit:25});
      if([...head.values()].some(m=>!store.archivedDiscordMessage(m.id))){item.before=null;save();continue;}
      const threads=await channel.threads?.fetchActive();if(threads?.threads.size)throw new Error('Kanaal bevat threads; handmatige archivering nodig.');
-     const archivedThreads=await channel.threads?.fetchArchived({limit:1});if(archivedThreads?.threads.size)throw new Error('Kanaal bevat gearchiveerde threads; niet verwijderd.');
-     const privateThreads=await channel.threads?.fetchArchived({type:'private',limit:1});if(privateThreads?.threads.size)throw new Error('Kanaal bevat privéthreads; niet verwijderd.');
+     const archivedThreads=await channel.threads?.fetchArchived({});if(archivedThreads?.threads.size)throw new Error('Kanaal bevat gearchiveerde threads; niet verwijderd.');
+     const privateThreads=await channel.threads?.fetchArchived({type:'private'});if(privateThreads?.threads.size)throw new Error('Kanaal bevat privéthreads; niet verwijderd.');
      item.status='archived';delete item.error;save();
      await channel.delete('Op verzoek van eigenaar: logs uitsluitend via website; historie en bijlagen gearchiveerd.');
      item.status='deleted';item.deletedAt=Date.now();save();
      store.recordWebLog(guild.id,{id:`log-retired:${id}`,cat:'system',action:'Discord-logkanaal gearchiveerd en verwijderd',time:Date.now(),channelName:item.name,detail:`${item.count} berichten bewaard. Nieuwe logs uitsluitend op de website.`});
-    }catch(e){item.error=String(e.code||e.message).slice(0,300);save();}
+    }catch(e){item.error=`${e.code||''} ${e.message||'Archiveren mislukt'}`.slice(0,300);save();}
    }
    state.done=[...retiredLogChannels.keys()].every(id=>['deleted','missing'].includes(state.channels[id]?.status));save();
   }finally{busy=false;}
