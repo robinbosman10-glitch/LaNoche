@@ -27,7 +27,7 @@ let theme=read('ln-theme','system');interval=read('ln-interval',10000);if(![5000
 function applyTheme(){document.documentElement.dataset.theme=theme==='system'?(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'):theme;}
 applyTheme();matchMedia('(prefers-color-scheme: light)').addEventListener('change',applyTheme);
 $('#themeToggle').onclick=()=>{theme=document.documentElement.dataset.theme==='light'?'dark':'light';localStorage.setItem('ln-theme',JSON.stringify(theme));applyTheme();};
-let identity=null,roster=null,vault=null;
+let identity=null,roster=null,vault=null,potsData=null;
 try{sessionStorage.removeItem('ln-connection');}catch{}
 if(location.hash.startsWith('#connect='))history.replaceState(null,'',location.pathname);
 function logoImage(img,url){img.src=url;img.onerror=()=>{img.onerror=null;img.src='/brand/logo.gif';};}
@@ -54,7 +54,7 @@ $('#gateLogout').onclick=logout;
 function status(message,online=false){$('#feedstate').textContent=message;$('.sample-label').textContent=online?'VERBONDEN':'NIET LIVE';document.documentElement.dataset.online=online?'yes':'no';}
 function bounds(){const p=$('#period').value;if(p==='hour')return Date.now()-3600000;if(p==='all')return 0;const now=new Date();now.setHours(0,0,0,0);return now.getTime();}
 function query(pageOverride=page){return new URLSearchParams({cat:active,action:actionFilter,q:$('#search').value.trim(),from:String(bounds()),period:$('#period').value,page:String(pageOverride)});}
-function nav(){const counts=Object.fromEntries((data?.counts||[]).map(c=>[c.cat,c.n]));let html=`<a class="navitem ${active==='all'?'active':''}" href="#/overzicht" title="Overzicht">${icon('grid')}<span class="navtext">Overzicht</span><span class="navcount">${data?Object.values(counts).reduce((a,b)=>a+b,0):'—'}</span></a>`;html+=`<div class="navgroup">Organisatie</div><a class="navitem ${active==='roster'?'active':''}" href="#/ledenlijst" title="Live ledenlijst">${icon('users')}<span class="navtext">Live ledenlijst</span></a>`;html+=`<a class="navitem ${active==='safe'?'active':''}" href="#/kluis" title="Kluisoverzicht">${icon('vault')}<span class="navtext">Kluisoverzicht</span></a>`;for(const group of ['Discord','La Noche','Systeem']){html+=`<div class="navgroup">${group}</div>`;for(const [key,c] of Object.entries(cats).filter(([,c])=>c.group===group))html+=`<a class="navitem ${active===key?'active':''}" href="#/logs/${key}" title="${esc(c.label)}">${icon(c.icon)}<span class="navtext">${esc(c.label)}</span><span class="navcount">${data?counts[key]||0:'—'}</span></a>`;}$('#nav').innerHTML=html;}
+function nav(){const counts=Object.fromEntries((data?.counts||[]).map(c=>[c.cat,c.n]));let html=`<a class="navitem ${active==='all'?'active':''}" href="#/overzicht" title="Overzicht">${icon('grid')}<span class="navtext">Overzicht</span><span class="navcount">${data?Object.values(counts).reduce((a,b)=>a+b,0):'—'}</span></a>`;html+=`<div class="navgroup">Organisatie</div><a class="navitem ${active==='roster'?'active':''}" href="#/ledenlijst" title="Live ledenlijst">${icon('users')}<span class="navtext">Live ledenlijst</span></a>`;html+=`<a class="navitem ${active==='safe'?'active':''}" href="#/kluis" title="Kluisoverzicht">${icon('vault')}<span class="navtext">Kluisoverzicht</span></a>`;html+=`<a class="navitem ${active==='pots'?'active':''}" href="#/potjes" title="Potjesoverzicht">${icon('money')}<span class="navtext">Potjesoverzicht</span></a>`;for(const group of ['Discord','La Noche','Systeem']){html+=`<div class="navgroup">${group}</div>`;for(const [key,c] of Object.entries(cats).filter(([,c])=>c.group===group))html+=`<a class="navitem ${active===key?'active':''}" href="#/logs/${key}" title="${esc(c.label)}">${icon(c.icon)}<span class="navtext">${esc(c.label)}</span><span class="navcount">${data?counts[key]||0:'—'}</span></a>`;}$('#nav').innerHTML=html;}
 const fmtTime=t=>new Date(t).toLocaleString('nl-NL',{timeZone:'Europe/Amsterdam',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'});
 function render(){
  nav();const s=data?.stats;$('#stats').innerHTML=[['Logmomenten',s?.total,'In deze categorie en periode','chart'],['Uitvoerders / leden',s?.people,'Unieke geregistreerde personen','users'],['Afgelopen uur',s?.recent||0,'Binnen deze selectie','message'],['Soorten acties',s?.types,'Geregistreerde gebeurtenissen','grid']].map(([label,n,note,ic])=>`<article class="stat"><div class="stat-top">${label}${icon(ic)}</div><div class="stat-main"><div class="stat-value">${data?Number(n||0).toLocaleString('nl-NL'):'—'}</div></div><div class="stat-note">${note}</div></article>`).join('');
@@ -73,6 +73,7 @@ function banner(){
  b.innerHTML=`<b>${warnings.length?'Controleer logdekking':'Verbonden met '+esc(data.guild.name)}</b><p>${esc(warnings.join(' ')||c.history)} <span>Laatste synchronisatie: ${fmtTime(lastSuccess)}.</span></p>`;
 }
 async function refresh(){
+ if(active==='pots')return refreshPots();
  if(active==='safe')return refreshVault();
  if(active==='roster')return refreshMembers();
  clearTimeout(timer);request?.abort();const my=++serial;
@@ -85,14 +86,15 @@ async function refresh(){
  finally{clearTimeout(timeout);if(my===serial&&!paused&&connection)timer=setTimeout(refresh,interval);}
 }
 function route(){
- const m=location.hash.match(/^#\/logs\/(\w+)$/);active=location.hash==='#/kluis'?'safe':location.hash==='#/ledenlijst'?'roster':m&&cats[m[1]]?m[1]:'all';actionFilter='all';page=1;data=null;$('#search').value='';
+ const m=location.hash.match(/^#\/logs\/(\w+)$/);active=location.hash==='#/potjes'?'pots':location.hash==='#/kluis'?'safe':location.hash==='#/ledenlijst'?'roster':m&&cats[m[1]]?m[1]:'all';actionFilter='all';page=1;data=null;$('#search').value='';
+ const potsPage=active==='pots';$('#potsPanel').hidden=!potsPage;
  const vaultPage=active==='safe';$('#vaultPanel').hidden=!vaultPage;
  const rosterPage=active==='roster';$('#memberPanel').hidden=!rosterPage;if(rosterPage&&!roster)$('#memberStatus').textContent='Leden laden…';
- for(const sel of ['#stats','.insights','.logpanel','#connectionBanner'])$(sel).hidden=rosterPage||vaultPage;
- $('#export').hidden=rosterPage||vaultPage;
- $('.pagehead h1').innerHTML=(vaultPage?'De kluis':rosterPage?'De familie':active==='all'?'Alles in beeld':esc(cats[active].label))+'<span>.</span>';
- $('.pagehead p').textContent=vaultPage?'Geld en voorraad. Altijd het actuele totaal.':rosterPage?'Alle gangleden, per hoogste rang. Rechtstreeks uit Discord.':active==='all'?'Elke geregistreerde actie. Eén overzicht.':cats[active].desc;
- $('.breadcrumb strong').textContent=vaultPage?'Kluisoverzicht':rosterPage?'Ledenlijst':active==='all'?'Overzicht':cats[active].label;render();refresh();
+ for(const sel of ['#stats','.insights','.logpanel','#connectionBanner'])$(sel).hidden=rosterPage||vaultPage||potsPage;
+ $('#export').hidden=rosterPage||vaultPage||potsPage;
+ $('.pagehead h1').innerHTML=(potsPage?'De potjes':vaultPage?'De kluis':rosterPage?'De familie':active==='all'?'Alles in beeld':esc(cats[active].label))+'<span>.</span>';
+ $('.pagehead p').textContent=potsPage?'Elk potje in beeld. Saldo, verdeling en totaal.':vaultPage?'Geld en voorraad. Altijd het actuele totaal.':rosterPage?'Alle gangleden, per hoogste rang. Rechtstreeks uit Discord.':active==='all'?'Elke geregistreerde actie. Eén overzicht.':cats[active].desc;
+ $('.breadcrumb strong').textContent=potsPage?'Potjesoverzicht':vaultPage?'Kluisoverzicht':rosterPage?'Ledenlijst':active==='all'?'Overzicht':cats[active].label;render();refresh();
 }
 function renderMembers(){
  const q=$('#memberSearch').value.trim().toLowerCase();let shown=0;
@@ -154,5 +156,23 @@ async function refreshVault(){
   if(r.status===401||r.status===403){vault=null;$('#vaultContents').replaceChildren();await loadIdentity();return;}
   if(!r.ok)throw new Error(result.error||'Kluis tijdelijk niet beschikbaar.');vault=result;renderVault();status(paused?'Gepauzeerd':'Live · iedere '+interval/1000+' seconden',!paused);
  }catch(e){if(my===serial){$('#vaultStatus').textContent='Niet bijgewerkt — '+(vault?'laatste ontvangen stand: '+fmtTime(vault.updatedAt)+'. ':'')+'Automatisch opnieuw proberen…';status('Verbinding onderbroken');}}
+ finally{clearTimeout(timeout);if(my===serial&&!paused&&connection)timer=setTimeout(refresh,interval);}
+}
+
+function renderPots(){
+ if(!potsData)return;
+ const names={gang:'Gang',drugs:'Drugs',wapens:'Wapens'},notes={gang:'Het gezamenlijke gangpotje',drugs:'Budget voor drugs',wapens:'Budget voor wapens'};
+ const sum=kind=>potsData.pots.reduce((n,p)=>n+p.balances[kind],0);
+ $('#potsContents').innerHTML=`<div class="vault-money">${[['wit','Wit geld'],['zwart','Zwart geld']].map(([kind,label])=>`<article class="vault-balance ${kind}"><div class="vault-card-top"><span class="vault-label"><i></i>${label}</span>${icon('money')}</div><div class="vault-amount"><span>$</span> ${vaultNumber(sum(kind))}</div><p>Alle potjes samen · ${label.toLowerCase()}</p></article>`).join('')}</div><div class="vault-total"><span>Totaal over alle potjes</span><strong>$ ${vaultNumber(sum('wit')+sum('zwart'))}</strong><span class="vault-total-note">Wit + zwart</span></div><div class="vault-section-heading"><div><h2>Een eigen plek voor elk budget</h2><p>Wit en zwart geld blijven apart zichtbaar.</p></div><span class="detailbadge">${potsData.pots.length} potjes</span></div><div class="pots-grid">${potsData.pots.map((p,i)=>`<article class="panel pot-card pot-${esc(p.id)}"><div class="pot-heading"><span class="pot-symbol">${icon(p.id==='gang'?'users':p.id==='drugs'?'grid':'shield')}</span><span class="vault-section-no">0${i+1}</span></div><h3>${esc(names[p.id]||p.id)}</h3><p>${esc(notes[p.id]||'')}</p><div class="pot-saldo"><span>Wit geld <small>${p.shares.wit}% bij toevoegen</small></span><strong>$ ${vaultNumber(p.balances.wit)}</strong></div><div class="pot-saldo"><span>Zwart geld <small>${p.shares.zwart}% bij toevoegen</small></span><strong>$ ${vaultNumber(p.balances.zwart)}</strong></div><div class="pot-total"><span>Totaal in dit potje</span><b>$ ${vaultNumber(p.balances.wit+p.balances.zwart)}</b></div></article>`).join('')}</div><section class="panel pots-allocation"><div class="panelhead"><div><h2>Zo wordt een storting verdeeld</h2><p>De percentages die de bot gebruikt bij geld toevoegen.</p></div>${icon('chart')}</div><div class="pots-splits">${[['wit','Wit geld'],['zwart','Zwart geld']].map(([kind,label])=>`<div class="pots-split"><h3>${label}</h3><div class="pots-bar" aria-label="${label}: ${potsData.pots.map(p=>(names[p.id]||p.id)+' '+p.shares[kind]+'%').join(', ')}">${potsData.pots.filter(p=>p.shares[kind]>0).map(p=>`<span class="pot-color-${esc(p.id)}" style="flex:${p.shares[kind]}">${p.shares[kind]}%</span>`).join('')}</div><div class="pots-legend">${potsData.pots.map(p=>`<span><i class="pot-color-${esc(p.id)}"></i>${esc(names[p.id]||p.id)} <b>${p.shares[kind]}%</b></span>`).join('')}</div></div>`).join('')}</div><div class="pots-explainer">Toevoegen verdeelt het bedrag automatisch. Bij opnemen kies je één potje en één geldsoort.</div></section><p class="vault-footnote">Beheer de potjes met /geld in Discord. Alle boekingen en resets vind je in de potjeslogs.</p>`;
+ $('#potsStatus').textContent=`Bijgewerkt ${fmtTime(potsData.updatedAt)} · automatisch elke ${interval/1000} seconden`;
+}
+async function refreshPots(){
+ clearTimeout(timer);request?.abort();const my=++serial;if(!connection)return;
+ request=new AbortController();const timeout=setTimeout(()=>request?.abort(),15000);
+ try{
+  const r=await fetch('/api/pots',{credentials:'same-origin',cache:'no-store',signal:request.signal});const result=await r.json();if(my!==serial)return;
+  if(r.status===401||r.status===403){potsData=null;$('#potsContents').replaceChildren();await loadIdentity();return;}
+  if(!r.ok)throw new Error(result.error||'Potjes tijdelijk niet beschikbaar.');potsData=result;renderPots();status(paused?'Gepauzeerd':'Live · iedere '+interval/1000+' seconden',!paused);
+ }catch(e){if(my===serial){$('#potsStatus').textContent='Niet bijgewerkt — '+(potsData?'laatste ontvangen stand: '+fmtTime(potsData.updatedAt)+'. ':'')+'Automatisch opnieuw proberen…';status('Verbinding onderbroken');}}
  finally{clearTimeout(timeout);if(my===serial&&!paused&&connection)timer=setTimeout(refresh,interval);}
 }

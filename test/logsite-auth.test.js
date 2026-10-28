@@ -100,3 +100,20 @@ test('vault overview uses current balances and isolated recent bookings behind D
  assert.equal((await dispatch(api,'/api/vault','POST',headers)).status,405);
  store.changeLogsiteAccess(G,LOGSITE_OWNER,V,false);assert.equal((await dispatch(api,'/api/vault','GET',headers)).status,401);
 }));
+test('pot overview reads actual split balances, withdrawals and resets without changing percentages',temporary(async store=>{
+ const api=createLogsiteApi(store,mockClient,G);
+ assert.equal((await dispatch(api,'/api/pots')).status,401);
+ const denied=store.loginLogsite(G,X,'Denied');assert.equal((await dispatch(api,'/api/pots','GET',{cookie:sessionCookie+'='+denied})).status,403);
+ const token=store.loginLogsite(G,LOGSITE_OWNER,'Owner'),headers={cookie:sessionCookie+'='+token};
+ const read=async()=>JSON.parse((await dispatch(api,'/api/pots','GET',headers)).body);
+ assert.deepEqual((await read()).pots.map(p=>p.balances),Array(3).fill({wit:0,zwart:0}));
+ store.changeMoney({id:'a',guild:G,actor:LOGSITE_OWNER,kind:'wit',action:'add',amount:1000});
+ store.changeMoney({id:'b',guild:G,actor:LOGSITE_OWNER,kind:'zwart',action:'add',amount:1000});
+ store.changeMoney({id:'c',guild:G,actor:LOGSITE_OWNER,kind:'wit',action:'remove',amount:100,pot:'gang'});
+ store.changeMoney({id:'private',guild:'other',actor:X,kind:'wit',action:'add',amount:9999});
+ const body=await read();assert.deepEqual(body.pots.map(p=>p.balances),[{wit:300,zwart:100},{wit:600,zwart:450},{wit:0,zwart:450}]);
+ assert.deepEqual(body.pots.map(p=>p.shares),[{wit:40,zwart:10},{wit:60,zwart:45},{wit:0,zwart:45}]);
+ store.resetMoney({id:'reset',guild:G,actor:LOGSITE_OWNER,pot:'gang',kind:'wit'});
+ const reset=await read();assert.equal(reset.pots[0].balances.wit,0);assert.equal(reset.pots[0].balances.zwart,100);assert.deepEqual(reset.pots.map(p=>p.shares),body.pots.map(p=>p.shares));
+ assert.equal((await dispatch(api,'/api/pots','POST',headers)).status,405);
+}));

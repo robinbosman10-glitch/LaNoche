@@ -1,3 +1,4 @@
+import {pots,shares} from './money-store.js';
 import {LOGSITE_OWNER} from './logsite-auth-store.js';
 import {retirementKey} from './log-retirement.js';
 import {getMembers} from './member-cache.js';
@@ -15,7 +16,7 @@ export async function handleLogsite(i,store,guildId){
 export function createLogsiteApi(store,getClient,guildId){
  let busy=0;
  return async(req,res)=>{
-  const url=new URL(req.url,'http://localhost');if(!['/api/vault','/api/logsite','/api/members','/api/log-retirement','/api/log-attachment'].includes(url.pathname))return false;
+  const url=new URL(req.url,'http://localhost');if(!['/api/pots','/api/vault','/api/logsite','/api/members','/api/log-retirement','/api/log-attachment'].includes(url.pathname))return false;
   const send=(status,data)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(data));return true;};
   if(req.method!=='GET')return send(405,{error:'Alleen lezen toegestaan.'});
   const session=currentLogsiteUser(req,store,guildId);
@@ -34,6 +35,10 @@ export function createLogsiteApi(store,getClient,guildId){
   if(busy>=3)return send(429,{error:'Te veel verzoeken. Probeer het zo opnieuw.'});
   busy++;
   try{
+   if(url.pathname==='/api/pots'){
+    const balances=store.moneyBalances(guildId);
+    return send(200,{pots:pots.map((id,i)=>({id,balances:Object.fromEntries(['wit','zwart'].map(kind=>[kind,balances.find(b=>b.kind===kind&&b.pot===id)?.amount??0])),shares:Object.fromEntries(['wit','zwart'].map(kind=>[kind,shares[kind][i]]))})),updatedAt:Date.now()});
+   }
    if(url.pathname==='/api/vault'){
     const balances=store.vaultBalances(guildId);
     const recent=store.recentVaultBookings(guildId).map(e=>({...e,person:guild.members.cache.get(e.actor)?.displayName||client.users.cache.get(e.actor)?.username||e.actor}));
