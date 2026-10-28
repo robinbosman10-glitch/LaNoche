@@ -85,3 +85,18 @@ test('archived attachments require an allowed session and migration status remai
  assert.equal((await dispatch(api,'/api/log-retirement','GET',h)).status,403);
  const owner=store.loginLogsite(G,LOGSITE_OWNER,'Owner');assert.equal((await dispatch(api,'/api/log-retirement','GET',{cookie:sessionCookie+'='+owner})).status,200);
 }));
+test('vault overview uses current balances and isolated recent bookings behind Discord access',temporary(async store=>{
+ const api=createLogsiteApi(store,mockClient,G);
+ assert.equal((await dispatch(api,'/api/vault')).status,401);
+ const denied=store.loginLogsite(G,X,'Denied');assert.equal((await dispatch(api,'/api/vault','GET',{cookie:sessionCookie+'='+denied})).status,403);
+ store.initializeVault(G);const initial=store.vaultBalances(G).find(b=>b.kind==='wit').amount;
+ store.bookVault('test-add',G,{kind:'wit',action:'add',amount:500,actor:LOGSITE_OWNER,date:'28/10/2026',time:1,reason:'test'});
+ store.bookVault('test-remove',G,{kind:'wit',action:'remove',amount:200,actor:LOGSITE_OWNER,date:'28/10/2026',time:2,reason:'test removal'});
+ store.bookVault('other','other-guild',{kind:'wapen',item:'private',action:'add',amount:1});
+ store.changeLogsiteAccess(G,LOGSITE_OWNER,V,true);const token=store.loginLogsite(G,V,'Viewer'),headers={cookie:sessionCookie+'='+token};
+ const r=await dispatch(api,'/api/vault','GET',headers),body=JSON.parse(r.body);
+ assert.equal(r.status,200);assert.equal(body.balances.find(b=>b.kind==='wit').amount,initial+300);
+ assert.deepEqual(body.recent.map(b=>b.id),['test-remove','test-add']);assert.doesNotMatch(r.body,/private|other-guild/);
+ assert.equal((await dispatch(api,'/api/vault','POST',headers)).status,405);
+ store.changeLogsiteAccess(G,LOGSITE_OWNER,V,false);assert.equal((await dispatch(api,'/api/vault','GET',headers)).status,401);
+}));

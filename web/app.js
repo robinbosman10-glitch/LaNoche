@@ -27,7 +27,7 @@ let theme=read('ln-theme','system');interval=read('ln-interval',10000);if(![5000
 function applyTheme(){document.documentElement.dataset.theme=theme==='system'?(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'):theme;}
 applyTheme();matchMedia('(prefers-color-scheme: light)').addEventListener('change',applyTheme);
 $('#themeToggle').onclick=()=>{theme=document.documentElement.dataset.theme==='light'?'dark':'light';localStorage.setItem('ln-theme',JSON.stringify(theme));applyTheme();};
-let identity=null,roster=null;
+let identity=null,roster=null,vault=null;
 try{sessionStorage.removeItem('ln-connection');}catch{}
 if(location.hash.startsWith('#connect='))history.replaceState(null,'',location.pathname);
 function logoImage(img,url){img.src=url;img.onerror=()=>{img.onerror=null;img.src='/brand/logo.gif';};}
@@ -43,7 +43,7 @@ async function loadIdentity(){
   $('#authMessage').textContent=identity&&!allowed?`Je bent ingelogd als ${identity.name} (${identity.id}), maar dit Discord-ID heeft geen toegang. Vraag de beheerder om je ID toe te voegen.`:!me.configured?'Discord-login is nog niet geconfigureerd. De beheerder moet de OAuth-instellingen afronden.':errors[authError]||'Log in met Discord om het logdashboard te openen.';
   if(identity){$('#profileName').textContent=identity.name;$('#profileRole').textContent=identity.admin?'Beheerder':'Logtoegang';document.querySelectorAll('.profile-avatar').forEach(img=>{img.src=identity.avatar;});}
   $('#accountsButton').hidden=!identity?.admin;
-  if(!allowed){data=null;roster=null;$('#memberGroups').replaceChildren();closeDetail();render();clearTimeout(timer);}else route();
+  if(!allowed){data=null;roster=null;vault=null;$('#vaultContents').replaceChildren();$('#memberGroups').replaceChildren();closeDetail();render();clearTimeout(timer);}else route();
  }catch{$('#authGate').hidden=false;$('#dashboard').hidden=true;$('#authMessage').textContent='De website is tijdelijk niet bereikbaar. Herlaad de pagina om opnieuw te proberen.';connection=null;data=null;clearTimeout(timer);}
 }
 async function logout(){
@@ -54,7 +54,7 @@ $('#gateLogout').onclick=logout;
 function status(message,online=false){$('#feedstate').textContent=message;$('.sample-label').textContent=online?'VERBONDEN':'NIET LIVE';document.documentElement.dataset.online=online?'yes':'no';}
 function bounds(){const p=$('#period').value;if(p==='hour')return Date.now()-3600000;if(p==='all')return 0;const now=new Date();now.setHours(0,0,0,0);return now.getTime();}
 function query(pageOverride=page){return new URLSearchParams({cat:active,action:actionFilter,q:$('#search').value.trim(),from:String(bounds()),period:$('#period').value,page:String(pageOverride)});}
-function nav(){const counts=Object.fromEntries((data?.counts||[]).map(c=>[c.cat,c.n]));let html=`<a class="navitem ${active==='all'?'active':''}" href="#/overzicht" title="Overzicht">${icon('grid')}<span class="navtext">Overzicht</span><span class="navcount">${data?Object.values(counts).reduce((a,b)=>a+b,0):'—'}</span></a>`;html+=`<div class="navgroup">Organisatie</div><a class="navitem ${active==='roster'?'active':''}" href="#/ledenlijst" title="Live ledenlijst">${icon('users')}<span class="navtext">Live ledenlijst</span></a>`;for(const group of ['Discord','La Noche','Systeem']){html+=`<div class="navgroup">${group}</div>`;for(const [key,c] of Object.entries(cats).filter(([,c])=>c.group===group))html+=`<a class="navitem ${active===key?'active':''}" href="#/logs/${key}" title="${esc(c.label)}">${icon(c.icon)}<span class="navtext">${esc(c.label)}</span><span class="navcount">${data?counts[key]||0:'—'}</span></a>`;}$('#nav').innerHTML=html;}
+function nav(){const counts=Object.fromEntries((data?.counts||[]).map(c=>[c.cat,c.n]));let html=`<a class="navitem ${active==='all'?'active':''}" href="#/overzicht" title="Overzicht">${icon('grid')}<span class="navtext">Overzicht</span><span class="navcount">${data?Object.values(counts).reduce((a,b)=>a+b,0):'—'}</span></a>`;html+=`<div class="navgroup">Organisatie</div><a class="navitem ${active==='roster'?'active':''}" href="#/ledenlijst" title="Live ledenlijst">${icon('users')}<span class="navtext">Live ledenlijst</span></a>`;html+=`<a class="navitem ${active==='safe'?'active':''}" href="#/kluis" title="Kluisoverzicht">${icon('vault')}<span class="navtext">Kluisoverzicht</span></a>`;for(const group of ['Discord','La Noche','Systeem']){html+=`<div class="navgroup">${group}</div>`;for(const [key,c] of Object.entries(cats).filter(([,c])=>c.group===group))html+=`<a class="navitem ${active===key?'active':''}" href="#/logs/${key}" title="${esc(c.label)}">${icon(c.icon)}<span class="navtext">${esc(c.label)}</span><span class="navcount">${data?counts[key]||0:'—'}</span></a>`;}$('#nav').innerHTML=html;}
 const fmtTime=t=>new Date(t).toLocaleString('nl-NL',{timeZone:'Europe/Amsterdam',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'});
 function render(){
  nav();const s=data?.stats;$('#stats').innerHTML=[['Logmomenten',s?.total,'In deze categorie en periode','chart'],['Uitvoerders / leden',s?.people,'Unieke geregistreerde personen','users'],['Afgelopen uur',s?.recent||0,'Binnen deze selectie','message'],['Soorten acties',s?.types,'Geregistreerde gebeurtenissen','grid']].map(([label,n,note,ic])=>`<article class="stat"><div class="stat-top">${label}${icon(ic)}</div><div class="stat-main"><div class="stat-value">${data?Number(n||0).toLocaleString('nl-NL'):'—'}</div></div><div class="stat-note">${note}</div></article>`).join('');
@@ -73,6 +73,7 @@ function banner(){
  b.innerHTML=`<b>${warnings.length?'Controleer logdekking':'Verbonden met '+esc(data.guild.name)}</b><p>${esc(warnings.join(' ')||c.history)} <span>Laatste synchronisatie: ${fmtTime(lastSuccess)}.</span></p>`;
 }
 async function refresh(){
+ if(active==='safe')return refreshVault();
  if(active==='roster')return refreshMembers();
  clearTimeout(timer);request?.abort();const my=++serial;
  if(!connection){status('Log in met Discord');banner();render();return;}
@@ -84,13 +85,14 @@ async function refresh(){
  finally{clearTimeout(timeout);if(my===serial&&!paused&&connection)timer=setTimeout(refresh,interval);}
 }
 function route(){
- const m=location.hash.match(/^#\/logs\/(\w+)$/);active=location.hash==='#/ledenlijst'?'roster':m&&cats[m[1]]?m[1]:'all';actionFilter='all';page=1;data=null;$('#search').value='';
+ const m=location.hash.match(/^#\/logs\/(\w+)$/);active=location.hash==='#/kluis'?'safe':location.hash==='#/ledenlijst'?'roster':m&&cats[m[1]]?m[1]:'all';actionFilter='all';page=1;data=null;$('#search').value='';
+ const vaultPage=active==='safe';$('#vaultPanel').hidden=!vaultPage;
  const rosterPage=active==='roster';$('#memberPanel').hidden=!rosterPage;if(rosterPage&&!roster)$('#memberStatus').textContent='Leden laden…';
- for(const sel of ['#stats','.insights','.logpanel','#connectionBanner'])$(sel).hidden=rosterPage;
- $('#export').hidden=rosterPage;
- $('.pagehead h1').innerHTML=(rosterPage?'De familie':active==='all'?'Alles in beeld':esc(cats[active].label))+'<span>.</span>';
- $('.pagehead p').textContent=rosterPage?'Alle gangleden, per hoogste rang. Rechtstreeks uit Discord.':active==='all'?'Elke geregistreerde actie. Eén overzicht.':cats[active].desc;
- $('.breadcrumb strong').textContent=rosterPage?'Ledenlijst':active==='all'?'Overzicht':cats[active].label;render();refresh();
+ for(const sel of ['#stats','.insights','.logpanel','#connectionBanner'])$(sel).hidden=rosterPage||vaultPage;
+ $('#export').hidden=rosterPage||vaultPage;
+ $('.pagehead h1').innerHTML=(vaultPage?'De kluis':rosterPage?'De familie':active==='all'?'Alles in beeld':esc(cats[active].label))+'<span>.</span>';
+ $('.pagehead p').textContent=vaultPage?'Geld en voorraad. Altijd het actuele totaal.':rosterPage?'Alle gangleden, per hoogste rang. Rechtstreeks uit Discord.':active==='all'?'Elke geregistreerde actie. Eén overzicht.':cats[active].desc;
+ $('.breadcrumb strong').textContent=vaultPage?'Kluisoverzicht':rosterPage?'Ledenlijst':active==='all'?'Overzicht':cats[active].label;render();refresh();
 }
 function renderMembers(){
  const q=$('#memberSearch').value.trim().toLowerCase();let shown=0;
@@ -134,3 +136,23 @@ async function changeAccount(id,add){
 }
 $('#addAccount').onsubmit=async e=>{e.preventDefault();const b=$('#addAccount button');b.disabled=true;try{await changeAccount($('#accountId').value.trim(),true);$('#accountId').value='';}catch(e){$('#accountMessage').textContent=e.message;}finally{b.disabled=false;}};
 $('#accountList').onclick=async e=>{const b=e.target.closest('[data-remove]');if(!b)return;b.disabled=true;try{await changeAccount(b.dataset.remove,false);}catch(e){$('#accountMessage').textContent=e.message;b.disabled=false;}};
+
+const vaultNumber=n=>Number(n||0).toLocaleString('nl-NL');
+function renderVault(){
+ if(!vault)return;
+ const money=k=>vault.balances.find(b=>b.kind===k)?.amount||0;
+ const total=money('wit')+money('zwart');
+ const groupNames={wapen:'Wapens',munitie:'Munitie',voorraad:'Overige voorraad'};
+ $('#vaultContents').innerHTML=`<div class="vault-money">${[['wit','Wit geld','Beschikbaar wit saldo'],['zwart','Zwart geld','Beschikbaar zwart saldo']].map(([k,label,note])=>`<article class="vault-balance ${k}"><div class="vault-card-top"><span class="vault-label"><i></i>${label}</span>${icon('money')}</div><div class="vault-amount"><span>$</span> ${vaultNumber(money(k))}</div><p>${note}</p></article>`).join('')}</div><div class="vault-total"><span>Totaal geld in de kluis</span><strong>$ ${vaultNumber(total)}</strong><span class="vault-total-note">Wit + zwart</span></div><div class="vault-section-heading"><div><h2>Wat ligt er in de kluis?</h2><p>De huidige voorraad, per soort.</p></div><span class="detailbadge">${vault.balances.filter(b=>groupNames[b.kind]&&b.amount>0).length} soorten op voorraad</span></div><div class="vault-inventory">${Object.entries(groupNames).map(([kind,label],index)=>{const rows=vault.balances.filter(b=>b.kind===kind&&b.amount>0);return `<article class="panel vault-stock"><div class="vault-stock-head"><span class="vault-section-no">0${index+1}</span><h3>${label}</h3><span>${rows.length} ${rows.length===1?'soort':'soorten'}</span></div><div class="vault-stock-labels"><span>VOORWERP</span><span>AANTAL</span></div>${rows.map(b=>`<div class="vault-stock-row"><b>${esc(b.item)}</b><strong>${vaultNumber(b.amount)}<small>stuks</small></strong></div>`).join('')||'<p class="vault-empty">Niets op voorraad</p>'}</article>`;}).join('')}</div><section class="panel vault-recent"><div class="panelhead"><div><h2>Laatste wijzigingen</h2><p>De laatste 8 geregistreerde kluisboekingen.</p></div><a class="vault-link" href="#/logs/vault">Volledig logboek ↗</a></div>${vault.recent.map(e=>`<article class="vault-booking"><span class="vault-direction ${e.action==='add'?'in':'out'}">${e.action==='add'?'↓':'↑'}</span><div class="vault-booking-info"><b>${esc(e.kind==='wit'?'Wit geld':e.kind==='zwart'?'Zwart geld':e.item)}</b><p>${esc(e.reason)}</p><small>${esc(e.date)} · ${esc(e.person||e.actor||'Onbekend')}</small></div><div class="vault-change ${e.action==='add'?'in':'out'}"><strong>${e.action==='add'?'+':'−'} ${['wit','zwart'].includes(e.kind)?'$ ':''}${vaultNumber(e.amount)}</strong><small>${e.action==='add'?'Toegevoegd':'Verwijderd'}</small></div></article>`).join('')||'<p class="vault-empty">Nog geen kluisboekingen geregistreerd.</p>'}</section><p class="vault-footnote">Boekingen doe je met /kluis in Discord. Dit overzicht toont de opgeslagen kluisinhoud.</p>`;
+ $('#vaultStatus').textContent=`Bijgewerkt ${fmtTime(vault.updatedAt)} · automatisch elke ${interval/1000} seconden`;
+}
+async function refreshVault(){
+ clearTimeout(timer);request?.abort();const my=++serial;if(!connection)return;
+ request=new AbortController();const timeout=setTimeout(()=>request?.abort(),15000);
+ try{
+  const r=await fetch('/api/vault',{credentials:'same-origin',cache:'no-store',signal:request.signal});const result=await r.json();if(my!==serial)return;
+  if(r.status===401||r.status===403){vault=null;$('#vaultContents').replaceChildren();await loadIdentity();return;}
+  if(!r.ok)throw new Error(result.error||'Kluis tijdelijk niet beschikbaar.');vault=result;renderVault();status(paused?'Gepauzeerd':'Live · iedere '+interval/1000+' seconden',!paused);
+ }catch(e){if(my===serial){$('#vaultStatus').textContent='Niet bijgewerkt — '+(vault?'laatste ontvangen stand: '+fmtTime(vault.updatedAt)+'. ':'')+'Automatisch opnieuw proberen…';status('Verbinding onderbroken');}}
+ finally{clearTimeout(timeout);if(my===serial&&!paused&&connection)timer=setTimeout(refresh,interval);}
+}

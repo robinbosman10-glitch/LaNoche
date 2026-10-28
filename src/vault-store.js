@@ -39,6 +39,7 @@ export function vaultStore(db) {
    db.prepare('INSERT INTO vault_bookings(id,guild,payload) VALUES(?,?,?)').run(id,guild,JSON.stringify({...entry,item}));db.exec('COMMIT');return true;
   }catch(e){db.exec('ROLLBACK');throw e;}
  },
+ recentVaultBookings(guild){return db.prepare('SELECT id,payload FROM vault_bookings WHERE guild=? ORDER BY rowid DESC LIMIT 8').all(guild).map(r=>({...JSON.parse(r.payload),id:r.id}));},
  pendingVaultPosts(guild){return db.prepare('SELECT id,payload FROM vault_bookings WHERE guild=? AND url IS NULL ORDER BY rowid LIMIT 50').all(guild).map(r=>({...JSON.parse(r.payload),id:r.id}));},
  };
 }
