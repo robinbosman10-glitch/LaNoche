@@ -42,6 +42,7 @@ async function editableRoles(guild, ids) {
     if (!role || !role.editable || role.managed || id === guild.id) throw new UserError(`Rol ${id} ontbreekt of kan niet beheerd worden. Zet mijn botrol boven deze rol.`);
   }
 }
+function logMemberAction(i,store,action,detail){store.recordWebLog?.(i.guildId,{id:`member-action:${i.id}`,cat:i.commandName==='warn'?'warns':'ranks',action,time:Date.now(),actor:i.user.id,user:i.options.getUser('persoon',true).id,channel:i.channelId,detail});}
 async function announceAfterChange(i, channel, payload, text) {
   try {
     const message = await channel.send(payload);
@@ -64,6 +65,7 @@ async function roleAction(i, store) {
       await editableRoles(i.guild, settings.joinRoles);
       if (settings.joinRoles.every(id => member.roles.cache.has(id))) throw new UserError('Dit lid heeft beide aangenomen-rollen al.');
       await member.roles.add(settings.joinRoles, audit);
+      logMemberAction(i,store,'Lid aangenomen',reason);
       return announceAfterChange(i, channel, branded('✦ WELKOM BIJ DE FAMILIE', `<@${member.id}> is aangenomen bij **La Noche**.\nEen nieuw hoofdstuk begint. Welkom in de familie.`, [...common, field('Toegekende rollen', settings.joinRoles.map(id=>`<@&${id}>`).join('\n'),false)]), 'Het lid is aangenomen en heeft beide rollen ontvangen.');
     }
     if (name === 'ontslaan') {
@@ -74,6 +76,7 @@ async function roleAction(i, store) {
       const managed = [...member.roles.cache.values()].filter(r=>r.managed);
       // Discord-managed roles and @everyone cannot be removed by bots.
       await member.roles.remove(remove.map(r=>r.id), audit);
+      logMemberAction(i,store,'Lid ontslagen',reason);
       store.clearAbsent(i.guildId, member.id);
       const extra = managed.length ? '\nAutomatisch beheerde Discord-rollen blijven ook behouden.' : '';
       return announceAfterChange(i, channel, branded('◈ DIENSTVERBAND BEËINDIGD', `<@${member.id}> maakt geen deel meer uit van **La Noche**.\nDe bijbehorende rollen zijn ingetrokken.`, [...common, field('Rollen', `Alle verwijderbare rollen ingetrokken. De uitzonderingsrol wordt behouden als het lid deze had.${extra}`, false)]), `Het lid is ontslagen; ${remove.length} rollen verwijderd.${extra}`);
@@ -89,10 +92,11 @@ async function roleAction(i, store) {
     const roles = [...member.roles.cache.keys()].filter(id=>id!==i.guildId && id!==change.from);
     await member.roles.set([...new Set([...roles, change.to])], audit);
     const promoted = name === 'promotie';
+    logMemberAction(i,store,promoted?'Lid gepromoveerd':'Lid gedegradeerd',`${reason}\nVorige rang: ${change.from}\nNieuwe rang: ${change.to}`);
     return announceAfterChange(i, channel, branded(promoted ? '✦ EEN NIEUWE RANG. EEN NIEUW HOOFDSTUK.' : '◈ RANGWIJZIGING', promoted ? `<@${member.id}> is **gepromoveerd**.\nInzet wordt gezien. Loyaliteit wordt beloond. Gefeliciteerd namens La Noche.` : `<@${member.id}> is één rang teruggezet.`, [...common, field('Vorige rang', `<@&${change.from}>`), field('Nieuwe rang', `<@&${change.to}>`)]), selectedRank ? `Het lid is gepromoveerd naar <@&${change.to}>.` : `Het lid is één rang ${promoted ? 'omhoog' : 'omlaag'} gezet.`);
   });
 }
-async function warnAction(i) {
+async function warnAction(i,store) {
   const user=i.options.getUser('persoon',true);
   return withLock(`${i.guildId}:member:${user.id}`,async()=>{
     const selected=i.options.getRole('rol');
@@ -113,9 +117,11 @@ async function warnAction(i) {
     ],'ticket-banner.gif','ticket-logo.gif');
     if(selected && !member.roles.cache.has(selected.id)){
       await member.roles.add(selected.id,`Waarschuwing door ${i.user.id}: ${reason}`.slice(0,500));
+      logMemberAction(i,store,'Waarschuwing gegeven',`${reason}\nWaarschuwingsrol: ${selected.id}`);
       return announceAfterChange(i,channel,payload,'De waarschuwingsrol is toegevoegd.');
     }
     const message=await channel.send(payload);
+    logMemberAction(i,store,'Waarschuwing gegeven',`${reason}\nWaarschuwingsrol: ${selected?.id||'Geen'}`);
     return i.editReply({content:`De waarschuwing is geplaatst.\n${message.url}`,allowedMentions:{parse:[]}});
   });
 }
@@ -194,7 +200,7 @@ export async function handleInteraction(i, guildId, store) {
       return i.editReply({content:`Je bericht is geplaatst.\n${message.url}`,allowedMentions:{parse:[]}});
     }
     if (modal) return await submitAbsenceRequest(i,store);
-    if (i.commandName==='warn') return await warnAction(i);
+    if (i.commandName==='warn') return await warnAction(i,store);
     if (['aangenomen','ontslaan','promotie','demote'].includes(i.commandName)) return await roleAction(i,store);
     if (i.commandName==='discordinactief') return await inactivity(i,store);
     if (i.commandName==='ledenlijst') { const url = await updateMemberlist(i.guild,store,i.channelId); return await i.editReply({content:`De ledenlijst is bijgewerkt.\n${url}`}); }

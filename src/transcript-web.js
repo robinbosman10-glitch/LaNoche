@@ -21,9 +21,10 @@ export function renderViewer(html,token) {
  .replace('<footer>','<img class="archive-banner" src="/assets/banner.gif" alt="La Noche"><footer>')
  .replace('</html>','<script src="/viewer.js" defer></script></html>');
 }
-export function createTranscriptServer(store) {
+export function createTranscriptServer(store,extraHandler) {
  const assets=new Map([['/assets/logo.gif',readFileSync(new URL('../assets/ticket-logo.gif',import.meta.url))],['/assets/banner.gif',readFileSync(new URL('../assets/ticket-banner.gif',import.meta.url))]]);
- return createServer((req,res)=>{
+ return createServer(async(req,res)=>{
+  if(extraHandler){try{if(await extraHandler(req,res))return;}catch{res.writeHead(500);res.end();return;}}
   res.setHeader('Cache-Control','no-store');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');res.setHeader('X-Robots-Tag','noindex, nofollow, noarchive');
   res.setHeader('Content-Security-Policy',"default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'");
   const send=(status,type,body)=>{res.writeHead(status,{'Content-Type':type});res.end(req.method==='HEAD'?undefined:body);};

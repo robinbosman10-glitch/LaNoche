@@ -2,6 +2,7 @@ import { SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
 
 // Names and descriptions follow the supplied screenshots. Wiring comes later.
 export const definitions = [
+  ['logsite', 'Open het beveiligde live logdashboard', true, 'logdashboard'],
   ['blacklist', 'Blokkeer een lid voor de serverkanalen of herstel toegang', true, 'blacklist'],
   ['kluis', 'Beheer geld, wapens en voorraad in de kluis', false, 'losstaande kluisregistratie'],
   ['geldreset', 'Zet een gekozen potje of alle potjes op nul', false, 'geldreset voor bevoegde rol'],

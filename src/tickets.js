@@ -93,6 +93,7 @@ async function openTicket(i,store) {
       message=await channel.send(payload);
       ticket.message=message.id;
       store.addTicket(ticket);
+      store.recordWebLog?.(i.guildId,{id:`ticket-open:${channel.id}`,cat:'tickets',action:'Ticket geopend',time:Date.now(),user:i.user.id,channel:channel.id,detail:`Categorie: ${kind}`});
       // Pinning is cosmetic; a missing pin permission must not discard a working ticket.
 
     } catch(e) {
@@ -147,6 +148,7 @@ export async function handleTicketInteraction(i,guildId,store) {
         ticket.closed=1;
       } else throw new UserError('Onbekende ticketactie.');
       store.updateTicket(ticket.channel,ticket);
+      if(['claim','unclaim'].includes(action))store.recordWebLog?.(i.guildId,{id:`ticket-action:${i.id}`,cat:'tickets',action:action==='claim'?'Ticket geclaimd':'Ticketclaim vrijgegeven',time:Date.now(),actor:i.user.id,user:ticket.user,channel:ticket.channel,detail:`Categorie: ${ticket.kind}\nAanvrager: ${ticket.user}`});
       if(ticket.closed)queueTicketAudit(store,ticket,'closed',i.user.id,i.channel.name,ticket.transcript);
       try {
         const message=await i.channel.messages.fetch(ticket.message);

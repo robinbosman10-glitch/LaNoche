@@ -1,3 +1,5 @@
+import {createLogHistory} from './logsite-history.js';
+import {createLogsiteApi,handleLogsite} from './logsite-api.js';
 import {syncChannelNames} from './channel-names.js';
 import {installServerLogs,flushServerLogs} from './server-logs.js';
 import {handleBlacklist,syncBlacklist,flushBlacklistLogs,syncBlacklistNotice} from './blacklist.js';
@@ -30,26 +32,27 @@ catch (error) { console.error(error.message); process.exit(1); }
 
 const store = createStore(process.env.DATA_DIR || './data');
 transcriptBase(); // Validate configured public origin before publishing links.
-const web=createTranscriptServer(store);
+const web=createTranscriptServer(store,createLogsiteApi(store,()=>client,config.guildId));
 web.on('error',()=>{console.error('Transcriptwebsite starten mislukt. Controleer PORT.');process.exit(1);});
 web.listen(Number(process.env.PORT||3000),'0.0.0.0');
-const intents=[GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages,GatewayIntentBits.GuildVoiceStates,GatewayIntentBits.GuildModeration];
+const intents=[GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages,GatewayIntentBits.GuildVoiceStates,GatewayIntentBits.GuildModeration,GatewayIntentBits.GuildMessageReactions,GatewayIntentBits.GuildInvites,GatewayIntentBits.GuildScheduledEvents,GatewayIntentBits.AutoModerationExecution];
 try {
   const application=await new REST({version:'10'}).setToken(config.token).get(Routes.currentApplication());
   const flags=new ApplicationFlagsBitField(application.flags ?? 0);
   if(flags.any([ApplicationFlagsBitField.Flags.GatewayMessageContent,ApplicationFlagsBitField.Flags.GatewayMessageContentLimited])) intents.push(GatewayIntentBits.MessageContent);
   else console.warn('$delete staat uit: schakel Message Content Intent in de Developer Portal in en herstart de bot.');
 } catch { console.warn('Message Content Intent kon niet worden gecontroleerd; $delete is voorlopig uitgeschakeld.'); }
-const client = new Client({ intents, partials:[Partials.Message], allowedMentions: { parse: [] } });
+const client = new Client({ intents, partials:[Partials.Message,Partials.Reaction,Partials.User], allowedMentions: { parse: [] } });
 const serverLogs=installServerLogs(client,config.guildId,store,error=>console.error('Serverlogs plaatsen mislukt',error?.code??error?.name));
 let ready = false;
 let refreshTimer;
 let absenceTimer;
 let auditTimer;
 let moneyTimer;
+let historyTimer;
 let absenceRefreshing=false;
 let liveRefresh;
-function stop(code) { serverLogs.stop(); web.close(); clearInterval(moneyTimer); clearInterval(refreshTimer); clearInterval(absenceTimer); clearInterval(auditTimer); liveRefresh?.stop(); client.destroy(); store.close(); process.exit(code); }
+function stop(code) { serverLogs.stop(); clearInterval(historyTimer); web.close(); clearInterval(moneyTimer); clearInterval(refreshTimer); clearInterval(absenceTimer); clearInterval(auditTimer); liveRefresh?.stop(); client.destroy(); store.close(); process.exit(code); }
 function logError(label, error) {
   // Do not log request bodies, headers, tokens or interaction payloads.
   serverLogs.error(label,error);
@@ -66,6 +69,9 @@ client.once(Events.ClientReady, async current => {
     store.beginMoneyLogReset(guild.id);
     store.initializeVault(guild.id);
     ready = true;
+    const history=createLogHistory(guild,store);
+    void history().catch(error=>logError('Loghistorie importeren mislukt',error));
+    historyTimer=setInterval(()=>void history().catch(error=>logError('Loghistorie importeren mislukt',error)),30000);historyTimer.unref();
     void serverLogs.start(guild).catch(error=>console.error('All logs starten mislukt',error?.code??error?.name));
     const refreshMoney=()=>Promise.all([
       syncChannelNames(guild,store).catch(error=>logError('Kanaalnamen aanpassen mislukt',error)),
@@ -122,7 +128,8 @@ client.on(Events.InteractionCreate, async interaction => {
       await interaction.reply({ content: 'De bot start nog op. Probeer het zo opnieuw.', flags: MessageFlags.Ephemeral });
       return;
     }
-    if(interaction.isChatInputCommand() && interaction.commandName==='blacklist')await handleBlacklist(interaction,config.guildId,store);
+    if(interaction.isChatInputCommand() && interaction.commandName==='logsite')await handleLogsite(interaction,store,config.guildId);
+    else if(interaction.isChatInputCommand() && interaction.commandName==='blacklist')await handleBlacklist(interaction,config.guildId,store);
     else if(vault)await handleVault(interaction,config.guildId,store);
     else if(money)await handleMoney(interaction,config.guildId,store);
     else if(transcript)await handleTranscript(interaction,store);

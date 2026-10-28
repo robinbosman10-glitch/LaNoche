@@ -1,3 +1,4 @@
+import {logsiteStore} from './logsite-store.js';
 import {vaultStore} from './vault-store.js';
 import { moneyStore } from './money-store.js';
 import { randomBytes } from 'node:crypto';
@@ -32,6 +33,7 @@ export function createStore(directory) {
   const money = moneyStore(db);
   return {
     ...money,
+    ...logsiteStore(db),
     ...vaultStore(db),
     recordVault(id,guild,entry) {
       db.exec('BEGIN IMMEDIATE');
