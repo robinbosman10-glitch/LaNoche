@@ -1,3 +1,4 @@
+import {webOnlyLogs,deliverLogsToWebsite} from './log-destination.js';
 import {transcriptBase,transcriptLink} from './transcript-web.js';
 import {captureTranscript} from './transcripts.js';
 import {AttachmentBuilder,ActionRowBuilder,ButtonBuilder,ButtonStyle,escapeMarkdown} from 'discord.js';
@@ -41,6 +42,7 @@ export function auditPayload(e) {
 const busy=new Set();
 const upgrading=new Set();
 export async function flushAudit(guild,store) {
+ if(webOnlyLogs())return deliverLogsToWebsite(guild,store);
  if(busy.has(guild.id)||upgrading.has(guild.id))return;
  busy.add(guild.id);
  try {
@@ -90,6 +92,7 @@ export async function handleTranscript(i,store) {
  return i.editReply({content:'📄 Download het La Noche-transcript en open het in je browser.',files:[new AttachmentBuilder(Buffer.from(event.transcript.html),{name:event.transcript.name})]});
 }
 export async function upgradeTicketLogs(guild,store) {
+ if(webOnlyLogs())return;
  if(upgrading.has(guild.id))return;
  upgrading.add(guild.id);
  try {

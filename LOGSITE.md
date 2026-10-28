@@ -36,3 +36,12 @@ Beide serverlogo's volgen het actuele servericoon uit Discord. Bij geen icoon wo
 ## Live ledenlijst
 
 De pagina **Live ledenlijst** leest `/api/members` via dezelfde beveiligde Discord-sessie. Zij toont echte Discord-leden per hoogste ingestelde gangrang, van hoog naar laag, zonder bots of dubbeltellingen. Namen, avatars en goedgekeurde afwezigheid komen uit Discord. De gedeelde member-cache wordt aanvankelijk volledig geladen en daarna door Discord Gateway-events bijgewerkt. De site ververst standaard iedere 10 seconden; pauze en verversinterval gelden ook hier. Bij verbindingsproblemen wordt de laatst ontvangen lijst duidelijk als niet bijgewerkt gemarkeerd. Niet-ingelogde bezoekers krijgen geen ledengegevens.
+
+
+## Logs uitsluitend op de website
+
+`LOG_DESTINATION=web` schakelt Discord-loguitvoer uit voor serverlogs, tickets, afwezigheid, potjes, kluis en blacklist. De oorspronkelijke database-events en transcripts blijven bestaan; de website leest dezelfde bronnen. Het Discord-kluisoverzicht wordt in deze modus niet meer bijgewerkt. De functionele potjes- en kluisboekingskanalen blijven werken.
+
+`RETIRE_LOG_CHANNELS=2026-10-28` activeert uitsluitend voor server 1311580149094809650 de aangevraagde eenmalige archivering en verwijdering van de zes exacte IDs in `log-destination.js`. Vooraf wordt op het bestaande datavolume `before-log-channel-retirement.sqlite` gemaakt. Daarna worden tekst, embeds, componenten en alle bijlagen duurzaam in SQLite opgeslagen; bijlagen worden op inhoud gededupliceerd. Een download-/leesfout of aangetroffen thread verhindert verwijdering van dat kanaal. De taak werkt per pagina, bewaart voortgang, en is herstartbaar. Andere kanalen worden nooit verwijderd.
+
+Niet eerder gestructureerd opgeslagen berichten verschijnen als archieflogs in de passende categorie. Bijlagen zijn via `/api/log-attachment?id=...` alleen downloadbaar met een geldige toegelaten websitesessie. De beheerder kan de migratiestatus lezen via `/api/log-retirement`. Er worden geen saldi, kluisvoorraad, rollen of website-accounts gewijzigd.

@@ -21,7 +21,7 @@ export function logsiteStore(db){
  CREATE TABLE IF NOT EXISTS web_sessions(hash TEXT PRIMARY KEY,guild TEXT NOT NULL,user TEXT NOT NULL,expires INTEGER NOT NULL);`);
  const put=(guild,e)=>{
   if(!e.id||!Number.isFinite(e.time))return;
-  const row={id:e.id,cat:e.cat||'system',action:e.action||e.title||'Gebeurtenis',time:e.time,person:e.person||e.actor||e.user||'Onbekend',channel:e.channelName||e.channel||'—',detail:e.detail||e.description||'',source:e.source||'Botregistratie',actor:e.actor||null,user:e.user||null,channelId:e.channelId||e.channel||null,transcript:e.transcript||null,url:e.url||null};
+  const row={id:e.id,cat:e.cat||'system',action:e.action||e.title||'Gebeurtenis',time:e.time,person:e.person||e.actor||e.user||'Onbekend',channel:e.channelName||e.channel||'—',detail:e.detail||e.description||'',source:e.source||'Botregistratie',actor:e.actor||null,user:e.user||null,channelId:e.channelId||e.channel||null,transcript:e.transcript||null,url:e.url||null,attachments:e.attachments||[]};
   db.prepare('INSERT OR IGNORE INTO web_logs VALUES(?,?,?,?,?,?,?,?,?)').run(row.id,guild,row.cat,row.action,row.time,String(row.person),String(row.channel),row.detail,JSON.stringify(row));
  };
  return {

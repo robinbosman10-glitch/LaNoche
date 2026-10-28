@@ -1,3 +1,4 @@
+import {webOnlyLogs,deliverLogsToWebsite} from './log-destination.js';
 import {createHash} from 'node:crypto';
 import {ActionRowBuilder,ButtonBuilder,ButtonStyle,StringSelectMenuBuilder,ModalBuilder,TextInputBuilder,TextInputStyle,MessageFlags,PermissionFlagsBits as P} from 'discord.js';
 import {branded,field} from './embeds.js';
@@ -142,6 +143,7 @@ export function moneyLogPayload(t) {
 }
 const logRuns=new Map();
 export function flushMoneyLogs(guild,store) {
+ if(webOnlyLogs())return deliverLogsToWebsite(guild,store);
   if(logRuns.has(guild.id))return logRuns.get(guild.id);
   const run=(async()=>{
     const resetKey=`money-log-reset-2026-10-27-1:${guild.id}`;

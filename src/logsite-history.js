@@ -1,3 +1,4 @@
+import {webOnlyLogs,retiredLogChannels} from './log-destination.js';
 // Recover old rank/warn announcements that predate structured logging.
 // Only the bot's own recognized embeds are saved; ordinary chat is discarded.
 const titles=new Map([
@@ -17,7 +18,7 @@ export function createLogHistory(guild,store){
   try{
    if(!state.channels){await guild.channels.fetch();state.channels=[...guild.channels.cache.values()].filter(c=>c.isTextBased()&&c.messages&&c.permissionsFor(guild.members.me)?.has(['ViewChannel','ReadMessageHistory'])).map(c=>c.id);save();}
    for(let step=0;step<2&&state.index<state.channels.length;step++){
-    const id=state.channels[state.index];const channel=await guild.channels.fetch(id).catch(()=>null);
+    const id=state.channels[state.index];if(webOnlyLogs()&&retiredLogChannels.has(id)){state.index++;state.before=null;save();continue;}const channel=await guild.channels.fetch(id).catch(()=>null);
     if(!channel?.messages){state.errors.push(id);state.index++;state.before=null;save();continue;}
     try{
      const messages=await channel.messages.fetch({limit:100,...(state.before?{before:state.before}:{})});

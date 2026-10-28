@@ -1,3 +1,4 @@
+import {webOnlyLogs,deliverLogsToWebsite} from './log-destination.js';
 import {fileURLToPath} from 'node:url';
 import {randomUUID,createHash} from 'node:crypto';
 import {PermissionFlagsBits as P,OverwriteType,MessageFlags,EmbedBuilder,ContainerBuilder,TextDisplayBuilder,MediaGalleryBuilder,MediaGalleryItemBuilder,AttachmentBuilder,SeparatorBuilder} from 'discord.js';
@@ -146,6 +147,7 @@ export function blacklistLogPayload(event) {
 }
 const logRuns=new Map();
 export function flushBlacklistLogs(guild,store) {
+ if(webOnlyLogs())return deliverLogsToWebsite(guild,store);
  if(logRuns.has(guild.id))return logRuns.get(guild.id);
  const run=(async()=>{
   const pending=store.pendingBlacklistLogs(guild.id);if(!pending.length)return;

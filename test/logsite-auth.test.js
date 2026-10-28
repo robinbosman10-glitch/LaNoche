@@ -75,3 +75,13 @@ test('live member list requires access, groups by highest rank, excludes bots an
  assert.equal(result.total,2);assert.equal(result.groups[0].id,high);assert.equal(result.groups[0].members.length,1);assert.equal(result.groups.at(-1).members.length,1);assert.equal(result.groups.at(-1).members[0].absent,true);
  guild.members.cache.delete(X);result=JSON.parse((await dispatch(api,'/api/members','GET',h)).body);assert.equal(result.total,1);
 }));
+
+test('archived attachments require an allowed session and migration status remains owner-only',temporary(async store=>{
+ const api=createLogsiteApi(store,mockClient,G);store.archiveAttachment(G,'555','old.html',Buffer.from('<script>archived</script>'));
+ assert.equal((await dispatch(api,'/api/log-attachment?id=555')).status,401);
+ const denied=store.loginLogsite(G,X,'Denied');assert.equal((await dispatch(api,'/api/log-attachment?id=555','GET',{cookie:sessionCookie+'='+denied})).status,403);
+ store.changeLogsiteAccess(G,LOGSITE_OWNER,V,true);const token=store.loginLogsite(G,V,'Viewer');const h={cookie:sessionCookie+'='+token};
+ const file=await dispatch(api,'/api/log-attachment?id=555','GET',h);assert.equal(file.status,200);assert.equal(file.headers['content-type'],'application/octet-stream');assert.match(file.headers['content-disposition'],/^attachment/);
+ assert.equal((await dispatch(api,'/api/log-retirement','GET',h)).status,403);
+ const owner=store.loginLogsite(G,LOGSITE_OWNER,'Owner');assert.equal((await dispatch(api,'/api/log-retirement','GET',{cookie:sessionCookie+'='+owner})).status,200);
+}));

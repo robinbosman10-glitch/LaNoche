@@ -1,3 +1,5 @@
+import {LOGSITE_OWNER} from './logsite-auth-store.js';
+import {retirementKey} from './log-retirement.js';
 import {getMembers} from './member-cache.js';
 import {settings} from './settings.js';
 import {currentLogsiteUser,logsiteOrigin} from './logsite-auth.js';
@@ -13,12 +15,20 @@ export async function handleLogsite(i,store,guildId){
 export function createLogsiteApi(store,getClient,guildId){
  let busy=0;
  return async(req,res)=>{
-  const url=new URL(req.url,'http://localhost');if(!['/api/logsite','/api/members'].includes(url.pathname))return false;
+  const url=new URL(req.url,'http://localhost');if(!['/api/logsite','/api/members','/api/log-retirement','/api/log-attachment'].includes(url.pathname))return false;
   const send=(status,data)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(data));return true;};
   if(req.method!=='GET')return send(405,{error:'Alleen lezen toegestaan.'});
   const session=currentLogsiteUser(req,store,guildId);
   if(!session)return send(401,{error:'Log eerst in met Discord.'});
   if(!store.logsiteAllowed(guildId,session.user))return send(403,{error:'Je Discord-ID heeft geen toegang tot deze website.'});
+  if(url.pathname==='/api/log-retirement'){
+   if(session.user!==LOGSITE_OWNER)return send(403,{error:'Alleen de beheerder.'});
+   return send(200,JSON.parse(store.getMeta(retirementKey(guildId))||'{"channels":{},"done":false}'));
+  }
+  if(url.pathname==='/api/log-attachment'){
+   const attachment=store.archivedAttachment(guildId,url.searchParams.get('id')||'');if(!attachment)return send(404,{error:'Bijlage ontbreekt.'});
+   res.writeHead(200,{'Content-Type':'application/octet-stream','Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(attachment.name).replace(/'/g,'%27')}`,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; sandbox"});res.end(Buffer.from(attachment.body));return true;
+  }
   const client=getClient(),guild=client?.guilds.cache.get(guildId);
   if(!guild||!client.isReady())return send(503,{error:'De bot maakt verbinding met Discord. Probeer het zo opnieuw.'});
   if(busy>=3)return send(429,{error:'Te veel verzoeken. Probeer het zo opnieuw.'});
@@ -42,6 +52,7 @@ export function createLogsiteApi(store,getClient,guildId){
     l.person=guild.members.cache.get(l.person)?.displayName||client.users.cache.get(l.person)?.username||l.person;
     l.channel=guild.channels.cache.get(l.channel)?.name||l.channel;l.detail=names(l.detail);
     if(l.cat==='tickets'&&l.channelId){const archive=store.auditEvent(`ticket:${l.channelId}:deleted`)||store.auditEvent(`ticket:${l.channelId}:closed`);if(archive?.transcript)l.transcript=l.channelId;}
+    l.attachments=(l.attachments||[]).map(a=>({name:a.name,url:logsiteOrigin()+'/api/log-attachment?id='+encodeURIComponent(a.id)}));
     if(l.transcript)l.transcript=`${transcriptBase()}/t/${store.transcriptToken(guildId,l.transcript)}`;
    }
    return send(200,{...result,importing,serverTime:Date.now(),guild:{id:guild.id,name:guild.name},expires:session.expires,coverage:{auditLog:!!guild.members.me?.permissions.has(P.ViewAuditLog),messageContent:client.options.intents.has(GatewayIntentBits.MessageContent),since:store.since,archive:JSON.parse(store.getMeta(`web-history:${guildId}`)||'null'),history:'Bewaarde botregistraties en nieuwe Discord-gebeurtenissen. Niet eerder opgeslagen of gewiste berichten kunnen niet worden hersteld.'}});

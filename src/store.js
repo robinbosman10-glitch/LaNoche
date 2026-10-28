@@ -1,10 +1,11 @@
+import {logRetirementStore} from './log-retirement-store.js';
 import {logsiteAuthStore} from './logsite-auth-store.js';
 import {logsiteStore} from './logsite-store.js';
 import {vaultStore} from './vault-store.js';
 import { moneyStore } from './money-store.js';
 import { randomBytes } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync,existsSync } from 'node:fs';
 import { join } from 'node:path';
 export function createStore(directory) {
   mkdirSync(directory, { recursive: true });
@@ -35,6 +36,8 @@ export function createStore(directory) {
   return {
     ...money,
     ...logsiteStore(db),
+    ...logRetirementStore(db),
+    backupLogDatabase(){const path=join(directory,'before-log-channel-retirement.sqlite');if(!existsSync(path))db.prepare('VACUUM INTO ?').run(path);},
     ...logsiteAuthStore(db),
     ...vaultStore(db),
     recordVault(id,guild,entry) {

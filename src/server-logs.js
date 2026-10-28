@@ -1,3 +1,4 @@
+import {webOnlyLogs,deliverLogsToWebsite} from './log-destination.js';
 import {Events,AuditLogEvent,EmbedBuilder,PermissionFlagsBits as P,escapeMarkdown} from 'discord.js';
 import {randomUUID,createHash} from 'node:crypto';
 export const allLogsChannel='1564898831898779658';
@@ -10,6 +11,7 @@ export function serverLogPayload(event) {
 }
 const flushes=new Map();
 export function flushServerLogs(guild,store) {
+ if(webOnlyLogs())return deliverLogsToWebsite(guild,store);
  if(flushes.has(guild.id))return flushes.get(guild.id);
  const run=(async()=>{
   const pending=store.pendingServerLogs(guild.id);if(!pending.length)return;
@@ -99,8 +101,7 @@ export function installServerLogs(client,guildId,store,onError=()=>{}) {
  });
  return {
   async start(guild) {
-   const channel=await guild.channels.fetch(allLogsChannel);
-   if(!channel?.send)throw new Error('All-logs kanaal ontbreekt');
+   if(!webOnlyLogs()){const channel=await guild.channels.fetch(allLogsChannel);if(!channel?.send)throw new Error('All-logs kanaal ontbreekt');}
    emit('🟢 Bot online','Algemene serverlogs worden hier verzameld.',{color:0x57f287});
    if(!guild.members.me?.permissions.has(P.ViewAuditLog))emit('⚠️ Auditlogtoegang ontbreekt','Geef de bot **Auditlogboek bekijken** voor kanaal-, rol-, kick- en overige beheerlogs.');
    await flushServerLogs(guild,store);

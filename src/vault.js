@@ -1,3 +1,4 @@
+import {webOnlyLogs,deliverLogsToWebsite} from './log-destination.js';
 import {normalizeItem} from './vault-store.js';
 import {ActionRowBuilder,ModalBuilder,TextInputBuilder,TextInputStyle,MessageFlags,PermissionFlagsBits as P,escapeMarkdown} from 'discord.js';
 import {DateTime} from 'luxon';
@@ -82,6 +83,7 @@ export async function handleVault(i,guildId,store) {
 
 const logRuns=new Map();
 export function flushVaultLogs(guild,store) {
+ if(webOnlyLogs())return deliverLogsToWebsite(guild,store);
   if(logRuns.has(guild.id))return logRuns.get(guild.id);
   const run=(async()=>{
     const pending=store.pendingVaultLogs(guild.id);
@@ -161,6 +163,7 @@ export function vaultOverviewPayload(store,guild) {
 }
 const overviewRuns=new Map();
 export function syncVault(guild,store) {
+ if(webOnlyLogs())return deliverLogsToWebsite(guild,store);
  const previous=overviewRuns.get(guild.id)??Promise.resolve();
  const run=previous.catch(()=>{}).then(async()=>{
   store.initializeVault(guild.id);

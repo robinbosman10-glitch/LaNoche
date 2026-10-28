@@ -1,3 +1,4 @@
+import {webOnlyLogs,retiredLogChannels} from './log-destination.js';
 const alphabet='abcdefghijklmnopqrstuvwxyz';
 const letters=[...'ᴀʙᴄᴅᴇꜰɢʜɪᴊᴋʟᴍɴᴏᴘǫʀꜱᴛᴜᴠᴡxʏᴢ'];
 export function styledChannelName(label,emoji) {
@@ -26,6 +27,7 @@ export function syncChannelNames(guild,store) {
  const run=(async()=>{
   const errors=[];
   for(const [id,name] of channelNames) {
+   if(webOnlyLogs()&&retiredLogChannels.has(id))continue;
    const key=`channel-style-2026-10-28:${guild.id}:${id}`;
    if(store.getMeta(key))continue;
    try {

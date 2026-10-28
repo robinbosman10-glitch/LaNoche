@@ -1,3 +1,4 @@
+import {createLogRetirement} from './log-retirement.js';
 import {createLogsiteAuth} from './logsite-auth.js';
 import {createLogHistory} from './logsite-history.js';
 import {createLogsiteApi,handleLogsite} from './logsite-api.js';
@@ -73,8 +74,10 @@ client.once(Events.ClientReady, async current => {
     store.initializeVault(guild.id);
     ready = true;
     const history=createLogHistory(guild,store);
+    const retireLogs=createLogRetirement(guild,store);
+    void retireLogs().catch(error=>logError('Logkanalen archiveren mislukt',error));
     void history().catch(error=>logError('Loghistorie importeren mislukt',error));
-    historyTimer=setInterval(()=>void history().catch(error=>logError('Loghistorie importeren mislukt',error)),30000);historyTimer.unref();
+    historyTimer=setInterval(()=>{void history().catch(error=>logError('Loghistorie importeren mislukt',error));void retireLogs().catch(error=>logError('Logkanalen archiveren mislukt',error));},30000);historyTimer.unref();
     void serverLogs.start(guild).catch(error=>console.error('All logs starten mislukt',error?.code??error?.name));
     const refreshMoney=()=>Promise.all([
       syncChannelNames(guild,store).catch(error=>logError('Kanaalnamen aanpassen mislukt',error)),
