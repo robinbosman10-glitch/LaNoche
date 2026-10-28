@@ -27,7 +27,7 @@ let theme=read('ln-theme','system');interval=read('ln-interval',10000);if(![5000
 function applyTheme(){document.documentElement.dataset.theme=document.documentElement.dataset.roster==='inner-circle'?'dark':theme==='system'?(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'):theme;}
 applyTheme();matchMedia('(prefers-color-scheme: light)').addEventListener('change',applyTheme);
 $('#themeToggle').onclick=()=>{theme=document.documentElement.dataset.theme==='light'?'dark':'light';localStorage.setItem('ln-theme',JSON.stringify(theme));applyTheme();};
-let identity=null,roster=null,vault=null,potsData=null;
+let identity=null,roster=null,vault=null,potsData=null,siteActivityData=null,siteActivityPage=1,siteVisitRecorded=false;
 try{sessionStorage.removeItem('ln-connection');}catch{}
 if(location.hash.startsWith('#connect='))history.replaceState(null,'',location.pathname);
 function logoImage(img,url){img.src=url;img.onerror=()=>{img.onerror=null;img.src='/brand/logo.gif';};}
@@ -42,8 +42,8 @@ async function loadIdentity(){
   const errors={invalid:'De inlogpoging is verlopen. Probeer opnieuw.',cancelled:'Discord-login geannuleerd.',failed:'Inloggen is niet gelukt. Probeer opnieuw.',unconfigured:'Discord-login wordt nog ingesteld door de beheerder.'};
   $('#authMessage').textContent=identity&&!allowed?`Je bent ingelogd als ${identity.name} (${identity.id}), maar dit Discord-ID heeft geen toegang. Vraag de beheerder om je ID toe te voegen.`:!me.configured?'Discord-login is nog niet geconfigureerd. De beheerder moet de OAuth-instellingen afronden.':errors[authError]||'Log in met Discord om het logdashboard te openen.';
   if(identity){$('#profileName').textContent=identity.name;$('#profileRole').textContent=identity.admin?'ᴅᴇᴠᴇʟᴏᴘᴍᴇɴᴛ':'Logtoegang';document.querySelectorAll('.profile-avatar').forEach(img=>{img.src=identity.avatar;});}
-  $('#accountsButton').hidden=!identity?.admin;
-  if(!allowed){delete document.documentElement.dataset.roster;data=null;roster=null;vault=null;$('#vaultContents').replaceChildren();$('#memberGroups').replaceChildren();closeDetail();render();clearTimeout(timer);}else route();
+  $('#accountsButton').hidden=!identity?.admin;$('#siteActivityLink').hidden=!identity?.admin;
+  if(!allowed){delete document.documentElement.dataset.roster;data=null;roster=null;vault=null;siteActivityData=null;clearSiteActivity();$('#vaultContents').replaceChildren();$('#memberGroups').replaceChildren();closeDetail();render();clearTimeout(timer);}else{recordSiteVisit();route();}
  }catch{$('#authGate').hidden=false;$('#dashboard').hidden=true;$('#authMessage').textContent='De website is tijdelijk niet bereikbaar. Herlaad de pagina om opnieuw te proberen.';connection=null;data=null;clearTimeout(timer);}
 }
 async function logout(){
@@ -54,8 +54,8 @@ $('#gateLogout').onclick=logout;
 function status(message,online=false){$('#feedstate').textContent=message;$('.sample-label').textContent=online?'VERBONDEN':'NIET LIVE';document.documentElement.dataset.online=online?'yes':'no';}
 function bounds(){const p=$('#period').value;if(p==='hour')return Date.now()-3600000;if(p==='all')return 0;const now=new Date();now.setHours(0,0,0,0);return now.getTime();}
 function query(pageOverride=page){return new URLSearchParams({cat:active,action:actionFilter,q:$('#search').value.trim(),from:String(bounds()),period:$('#period').value,page:String(pageOverride)});}
-const canPage=id=>!!identity?.pages?.includes(id);
-const pageRoute=id=>id==='overview'?'#/overzicht':id==='roster'?'#/ledenlijst':id==='safe'?'#/kluis':id==='pots'?'#/potjes':'#/logs/'+id;
+const canPage=id=>id==='siteactivity'?!!identity?.admin:!!identity?.pages?.includes(id);
+const pageRoute=id=>id==='siteactivity'?'#/siteactiviteit':id==='overview'?'#/overzicht':id==='roster'?'#/ledenlijst':id==='safe'?'#/kluis':id==='pots'?'#/potjes':'#/logs/'+id;
 function hidePageLinks(){for(const a of document.querySelectorAll('a[href^="#/logs/"]'))a.hidden=!canPage(a.getAttribute('href').slice(7));}
 function nav(){
  const counts=Object.fromEntries((data?.counts||[]).map(c=>[c.cat,c.n]));let html='';
@@ -93,6 +93,7 @@ async function refresh(){
   }catch{status('Verbinding onderbroken');clearTimeout(timer);if(!paused)timer=setTimeout(refresh,interval);return;}
  }
  if(active==='none'){clearTimeout(timer);if(connection&&!paused)timer=setTimeout(refresh,interval);return;}
+ if(active==='siteactivity')return refreshSiteActivity();
  if(active==='pots')return refreshPots();
  if(active==='safe')return refreshVault();
  if(active==='roster')return refreshMembers();
@@ -106,21 +107,22 @@ async function refresh(){
  finally{clearTimeout(timeout);if(my===serial&&!paused&&connection)timer=setTimeout(refresh,interval);}
 }
 function route(){
- const m=location.hash.match(/^#\/logs\/(\w+)$/);active=location.hash==='#/potjes'?'pots':location.hash==='#/kluis'?'safe':location.hash==='#/ledenlijst'?'roster':m&&cats[m[1]]?m[1]:'all';actionFilter='all';page=1;data=null;$('#search').value='';
+ const m=location.hash.match(/^#\/logs\/(\w+)$/);active=location.hash==='#/siteactiviteit'?'siteactivity':location.hash==='#/potjes'?'pots':location.hash==='#/kluis'?'safe':location.hash==='#/ledenlijst'?'roster':m&&cats[m[1]]?m[1]:'all';actionFilter='all';page=1;data=null;$('#search').value='';
  const requested=active==='all'?'overview':active;
  if(!canPage(requested)){
   const next=identity?.pages?.[0];if(next){location.hash=pageRoute(next);return;}
   active='none';
  }
+ const activityPage=active==='siteactivity';$('#siteActivityPanel').hidden=!activityPage;$('#siteActivityLink').classList.toggle('active',activityPage);
  const noPages=active==='none';$('#noPages').hidden=!noPages;$('#pause').hidden=noPages;
  const potsPage=active==='pots';$('#potsPanel').hidden=!potsPage;
  const vaultPage=active==='safe';$('#vaultPanel').hidden=!vaultPage;
  const rosterPage=active==='roster';document.documentElement.dataset.roster=rosterPage?'inner-circle':'';applyTheme();$('#themeToggle').hidden=rosterPage;$('#memberPanel').hidden=!rosterPage;if(rosterPage&&!roster)$('#memberStatus').textContent='Leden laden…';
- for(const sel of ['#stats','.insights','.logpanel','#connectionBanner'])$(sel).hidden=rosterPage||vaultPage||potsPage||noPages;
- $('#export').hidden=rosterPage||vaultPage||potsPage||noPages;
- $('.pagehead h1').innerHTML=(noPages?'Jouw toegang':potsPage?'De potjes':vaultPage?'De kluis':rosterPage?'De Inner Circle':active==='all'?'Alles in beeld':esc(cats[active].label))+'<span>.</span>';
- $('.pagehead p').textContent=noPages?'Je account heeft nog geen toegestane pagina’s.':potsPage?'Elk potje in beeld. Saldo, verdeling en totaal.':vaultPage?'Geld en voorraad. Altijd het actuele totaal.':rosterPage?'Eén familie. Iedere rang op zijn plek. Rechtstreeks uit Discord.':active==='all'?'Elke geregistreerde actie. Eén overzicht.':cats[active].desc;
- $('.breadcrumb strong').textContent=noPages?'Toegang':potsPage?'Potjesoverzicht':vaultPage?'Kluisoverzicht':rosterPage?'Ledenlijst':active==='all'?'Overzicht':cats[active].label;render();hidePageLinks();refresh();
+ for(const sel of ['#stats','.insights','.logpanel','#connectionBanner'])$(sel).hidden=rosterPage||vaultPage||potsPage||activityPage||noPages;
+ $('#export').hidden=rosterPage||vaultPage||potsPage||activityPage||noPages;
+ $('.pagehead h1').innerHTML=(activityPage?'Siteactiviteit':noPages?'Jouw toegang':potsPage?'De potjes':vaultPage?'De kluis':rosterPage?'De Inner Circle':active==='all'?'Alles in beeld':esc(cats[active].label))+'<span>.</span>';
+ $('.pagehead p').textContent=activityPage?'Wie de site bezoekt en met Discord inlogt. Alleen voor jou.':noPages?'Je account heeft nog geen toegestane pagina’s.':potsPage?'Elk potje in beeld. Saldo, verdeling en totaal.':vaultPage?'Geld en voorraad. Altijd het actuele totaal.':rosterPage?'Eén familie. Iedere rang op zijn plek. Rechtstreeks uit Discord.':active==='all'?'Elke geregistreerde actie. Eén overzicht.':cats[active].desc;
+ $('.breadcrumb strong').textContent=activityPage?'Siteactiviteit':noPages?'Toegang':potsPage?'Potjesoverzicht':vaultPage?'Kluisoverzicht':rosterPage?'Ledenlijst':active==='all'?'Overzicht':cats[active].label;render();hidePageLinks();refresh();
 }
 function renderMembers(){
  const q=$('#memberSearch').value.trim().toLowerCase();let shown=0;
@@ -288,3 +290,46 @@ $('#vaultConfirm').onclick=async()=>{
  catch(e){$('#vaultMessage').textContent=e.name==='TimeoutError'||e.message==='Failed to fetch'?'Geen bevestiging ontvangen. Klik opnieuw op bevestigen; dezelfde boeking wordt niet dubbel verwerkt.':e.message;}
  finally{vaultBusy=false;$('#vaultConfirm').disabled=false;$('#vaultBack').disabled=false;}
 };
+
+function clearSiteActivity(){
+ $('#sitePresenceRows').replaceChildren();$('#siteActivityRows').replaceChildren();$('#siteActivityRecent').textContent='—';$('#siteActivityTotal').textContent='—';
+}
+function recordSiteVisit(){
+ if(siteVisitRecorded||!identity?.allowed)return;siteVisitRecorded=true;
+ void fetch('/api/site-visit',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRF-Token':identity.csrf},body:'{}'}).catch(()=>{});
+}
+function renderSiteActivity(){
+ if(!siteActivityData||!identity?.admin)return;
+ const activity=siteActivityData,events=activity.events||[],presence=activity.presence||[],now=activity.serverTime||Date.now();
+ const when=value=>value?fmtTime(value):'—';
+ const person=p=>`<div class="site-activity-person">${p.avatar?`<img src="${esc(p.avatar)}" alt="" loading="lazy">`:'<span class="site-activity-initial" aria-hidden="true">'+esc(String(p.name||p.user||'?').slice(0,2).toUpperCase())+'</span>'}<span><b>${esc(p.name||p.user||'Onbekend')}</b><small>${esc(p.user||'Geen Discord-ID vastgesteld')}</small></span></div>`;
+ const pageName=value=>{if(!value)return '—';const id=String(value).replace(/^#\//,'').replace(/^logs\//,'');return ({overview:'Overzicht',overzicht:'Overzicht',roster:'Ledenlijst',ledenlijst:'Ledenlijst',safe:'Kluisoverzicht',kluis:'Kluisoverzicht',pots:'Potjesoverzicht',potjes:'Potjesoverzicht',siteactivity:'Siteactiviteit',siteactiviteit:'Siteactiviteit'})[id]||cats[id]?.label||String(value);};
+ $('#siteActivityRecent').textContent=presence.filter(p=>p.lastSeen&&now-p.lastSeen<120000).length.toLocaleString('nl-NL');
+ $('#siteActivityTotal').textContent=Number(activity.total||0).toLocaleString('nl-NL');
+ $('#siteActivityTotalLabel').textContent=$('#siteActivityKind').value==='all'?'Alle opgeslagen gebeurtenissen':'Binnen de gekozen selectie';
+ $('#sitePresenceRows').innerHTML=presence.map(p=>`<tr><td>${person(p)}</td><td class="timestamp">${when(p.lastSeen)}</td><td class="timestamp">${when(p.lastLogin)}</td><td>${esc(pageName(p.page))}</td></tr>`).join('');
+ $('#sitePresenceEmpty').hidden=presence.length>0;
+ const names={login:'Ingelogd met Discord',login_denied:'Inloggen geweigerd',logout:'Uitgelogd',visit:'Site geopend'};
+ $('#siteActivityRows').innerHTML=events.map(e=>`<tr><td><span class="site-event-kind site-event-${esc(e.kind)}"><span aria-hidden="true">${e.kind==='login'?'↳':e.kind==='login_denied'?'×':e.kind==='logout'?'↗':'◉'}</span>${esc(names[e.kind]||e.kind)}</span></td><td>${person(e)}</td><td class="timestamp">${when(e.time)}<small>Europe/Amsterdam</small></td></tr>`).join('');
+ $('#siteActivityEmpty').hidden=events.length>0;
+ const eventPage=activity.page||1,totalPages=activity.pages||1;
+ $('#siteActivityPage').textContent=eventPage+' / '+totalPages;
+ $('#siteActivityRange').textContent=activity.total?`${(eventPage-1)*50+1}–${Math.min(eventPage*50,activity.total)} van ${activity.total} gebeurtenissen`:'0 gebeurtenissen';
+ $('#siteActivityPrev').disabled=eventPage<=1;$('#siteActivityNext').disabled=eventPage>=totalPages;
+ $('#siteActivityCoverage').textContent=(activity.since?'Registratie vanaf '+fmtTime(activity.since)+'. ':'')+'Niet eerder opgeslagen bezoeken zijn niet beschikbaar.';
+ $('#siteActivityStatus').textContent='Bijgewerkt '+fmtTime(now)+' · iedere '+interval/1000+' seconden';
+}
+async function refreshSiteActivity(){
+ clearTimeout(timer);request?.abort();const my=++serial;if(!connection||!identity?.admin){clearSiteActivity();return;}
+ request=new AbortController();const timeout=setTimeout(()=>request?.abort(),15000);
+ try{
+  const query=new URLSearchParams({page:String(siteActivityPage),kind:$('#siteActivityKind').value});
+  const r=await fetch('/api/site-activity?'+query,{credentials:'same-origin',cache:'no-store',signal:request.signal});const result=await r.json();if(my!==serial)return;
+  if(r.status===401||r.status===403){siteActivityData=null;clearSiteActivity();await loadIdentity();return;}
+  if(!r.ok)throw new Error(result.error||'Siteactiviteit tijdelijk niet beschikbaar.');siteActivityData=result;siteActivityPage=result.page||1;renderSiteActivity();status(paused?'Gepauzeerd':'Live · iedere '+interval/1000+' seconden',!paused);
+ }catch(e){if(my===serial){$('#siteActivityStatus').textContent='Niet bijgewerkt — '+(siteActivityData?'laatst ontvangen gegevens blijven zichtbaar. ':'')+(e.name==='AbortError'?'Probeer zo opnieuw.':e.message);status('Verbinding onderbroken');}}
+ finally{clearTimeout(timeout);if(my===serial&&!paused&&connection&&identity?.admin)timer=setTimeout(refresh,interval);}
+}
+$('#siteActivityKind').onchange=()=>{siteActivityPage=1;refresh();};
+$('#siteActivityPrev').onclick=()=>{if(siteActivityPage>1){siteActivityPage--;refresh();}};
+$('#siteActivityNext').onclick=()=>{siteActivityPage++;refresh();};

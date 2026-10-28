@@ -60,7 +60,9 @@ export function createLogsiteAuth(store,getClient,guildId,{env=process.env,fetch
     if(!/^\d{17,20}$/.test(user.id||'')||user.bot)throw new Error('identity');
     // OAuth tokens remain server-side and are never persisted or returned.
     const previous=cookieValue(req,sessionCookie);store.logoutLogsite(previous);
+    const allowed=store.logsiteAllowed(guildId,user.id);
     const token=store.loginLogsite(guildId,user.id,user.global_name||user.username||user.id,discordAvatar(user));
+    store.recordSiteEvent(guildId,user.id,user.global_name||user.username||user.id,discordAvatar(user),allowed?'login':'login_denied');
     res.setHeader('Set-Cookie',[cookie(stateCookie,'',0),cookie(sessionCookie,token,12*3600)]);
     return redirect(store.logsiteAllowed(guildId,user.id)?'/':'/?auth=denied');
    }catch{return redirect('/?auth=failed');}
@@ -68,13 +70,14 @@ export function createLogsiteAuth(store,getClient,guildId,{env=process.env,fetch
   const user=currentLogsiteUser(req,store,guildId);
   if(path==='/api/me'){
    if(req.method!=='GET')return send(405,{error:'Methode niet toegestaan.'});
+   if(user&&store.logsiteAllowed(guildId,user.user))store.noteSiteSeen(guildId,user.user,user.username,user.avatar);
    const guild=getClient()?.guilds.cache.get(guildId);
    return send(200,{guild:{name:guild?.name||'La Noche',icon:guild?.iconURL({extension:guild.icon?.startsWith('a_')?'gif':'png',size:128})||'/brand/logo.gif'},configured,loginUrl:origin+'/auth/discord',user:user?{id:user.user,name:user.username,avatar:user.avatar,admin:user.user===LOGSITE_OWNER,allowed:store.logsiteAllowed(guildId,user.user),csrf:user.csrf,pages:store.logsitePages(guildId,user.user)}:null});
   }
   if(!user)return send(401,{error:'Log eerst in met Discord.'});
   if(req.method!=='GET'&&(req.headers.origin!==origin||!sameSecret(req.headers['x-csrf-token'],user.csrf)))return send(403,{error:'Ongeldig beveiligingstoken. Herlaad de pagina.'});
   if(path==='/api/logout'){
-   if(req.method!=='POST')return send(405,{error:'Methode niet toegestaan.'});store.logoutLogsite(cookieValue(req,sessionCookie));res.setHeader('Set-Cookie',cookie(sessionCookie,'',0));return send(200,{ok:true});
+   if(req.method!=='POST')return send(405,{error:'Methode niet toegestaan.'});store.recordSiteEvent(guildId,user.user,user.username,user.avatar,'logout');store.logoutLogsite(cookieValue(req,sessionCookie));res.setHeader('Set-Cookie',cookie(sessionCookie,'',0));return send(200,{ok:true});
   }
   if(user.user!==LOGSITE_OWNER)return send(403,{error:'Alleen de vaste beheerder kan accounts beheren.'});
   if(path==='/api/access'&&req.method==='GET')return send(200,{owner:LOGSITE_OWNER,users:store.logsiteUsers(guildId),pages:logsitePages});

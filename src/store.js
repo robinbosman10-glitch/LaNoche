@@ -1,3 +1,4 @@
+import {siteActivityStore} from './site-activity-store.js';
 import {logRetirementStore} from './log-retirement-store.js';
 import {logsiteAuthStore} from './logsite-auth-store.js';
 import {logsiteStore} from './logsite-store.js';
@@ -35,6 +36,7 @@ export function createStore(directory) {
   const money = moneyStore(db);
   return {
     ...money,
+    ...siteActivityStore(db),
     ...logsiteStore(db),
     ...logRetirementStore(db),
     backupOperationalDatabase(){const path=join(directory,'before-operational-channel-retirement.sqlite');if(!existsSync(path))db.prepare('VACUUM INTO ?').run(path);},

@@ -45,6 +45,8 @@ export function createLogsiteApi(store,getClient,guildId){
   }
   const client=getClient(),guild=client?.guilds.cache.get(guildId);
   if(!guild||!client.isReady())return send(503,{error:'De bot maakt verbinding met Discord. Probeer het zo opnieuw.'});
+  const currentPage=required||(url.pathname==='/api/logsite'?(url.searchParams.get('cat')==='all'||!url.searchParams.get('cat')?'overview':url.searchParams.get('cat')):null);
+  store.noteSiteSeen(guildId,session.user,session.username,session.avatar,currentPage);
   if(busy>=3)return send(429,{error:'Te veel verzoeken. Probeer het zo opnieuw.'});
   busy++;
   try{
