@@ -1,22 +1,23 @@
-import {webOnlyLogs,retiredLogChannels} from './log-destination.js';
+import {webOnlyLogs,retiredLogChannels,retiredOperationalChannels} from './log-destination.js';
 import {classifyLog} from './logsite-store.js';
 const targetGuild='1311580149094809650';
 export const retirementKey=guild=>`discord-log-retirement:2026-10-28:${guild}`;
+export const operationalRetirementKey=guild=>`discord-operational-retirement:2026-10-28:${guild}`;
 async function downloadAttachment(url){
  const parsed=new URL(url);if(parsed.protocol!=='https:'||!['cdn.discordapp.com','media.discordapp.net'].includes(parsed.hostname))throw new Error('Onbekende bijlagehost; kanaal blijft behouden.');
  const r=await fetch(url,{redirect:'error',signal:AbortSignal.timeout(30000)});if(!r.ok||Number(r.headers.get('content-length'))>25*1024*1024)throw new Error('Bijlage kon niet veilig worden bewaard; kanaal blijft behouden.');
  const parts=[];let size=0;for await(const part of r.body){size+=part.length;if(size>25*1024*1024)throw new Error('Bijlage te groot; kanaal blijft behouden.');parts.push(part);}return Buffer.concat(parts);
 }
-export function createLogRetirement(guild,store,{download=downloadAttachment}={}){
- let busy=false;
+export function createLogRetirement(guild,store,{download=downloadAttachment,operational=false}={}){
+ let busy=false;const targets=operational?retiredOperationalChannels:retiredLogChannels,key=operational?operationalRetirementKey:retirementKey;
  return async()=>{
-  if(busy||!webOnlyLogs()||guild.id!==targetGuild||process.env.RETIRE_LOG_CHANNELS!=='2026-10-28')return;
-  busy=true;const state=JSON.parse(store.getMeta(retirementKey(guild.id))||'{"channels":{}}');
-  const save=()=>store.setMeta(retirementKey(guild.id),JSON.stringify(state));
+  if(busy||!webOnlyLogs()||guild.id!==targetGuild||(operational?(process.env.RETIRE_OPERATIONAL_CHANNELS!=='2026-10-28'||process.env.VAULT_MANAGEMENT!=='web'||process.env.POT_MANAGEMENT!=='web'||process.env.OPERATIONAL_CHANNELS!=='web'):process.env.RETIRE_LOG_CHANNELS!=='2026-10-28'))return;
+  busy=true;const state=JSON.parse(store.getMeta(key(guild.id))||'{"channels":{}}');
+  const save=()=>store.setMeta(key(guild.id),JSON.stringify(state));
   try{
-   store.backupLogDatabase();
+   if(operational)store.backupOperationalDatabase();else store.backupLogDatabase();
    // Process at most one page per channel each run. Every message and file is persisted before deletion.
-   for(const [id,cat] of retiredLogChannels){
+   for(const [id,cat] of targets){
     const item=state.channels[id]??={count:0,before:null,status:'archiving'};if(['deleted','missing'].includes(item.status))continue;
     try{
      let channel;try{channel=await guild.channels.fetch(id);}catch(e){if(e.code!==10003)throw e;}
@@ -52,7 +53,7 @@ export function createLogRetirement(guild,store,{download=downloadAttachment}={}
      store.recordWebLog(guild.id,{id:`log-retired:${id}`,cat:'system',action:'Discord-logkanaal gearchiveerd en verwijderd',time:Date.now(),channelName:item.name,detail:`${item.count} berichten bewaard. Nieuwe logs uitsluitend op de website.`});
     }catch(e){item.error=`${e.code||''} ${e.message||'Archiveren mislukt'}`.slice(0,300);save();}
    }
-   state.done=[...retiredLogChannels.keys()].every(id=>['deleted','missing'].includes(state.channels[id]?.status));save();
+   state.done=[...targets.keys()].every(id=>['deleted','missing'].includes(state.channels[id]?.status));save();
   }finally{busy=false;}
  };
 }

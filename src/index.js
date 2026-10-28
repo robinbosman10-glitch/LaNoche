@@ -75,9 +75,11 @@ client.once(Events.ClientReady, async current => {
     ready = true;
     const history=createLogHistory(guild,store);
     const retireLogs=createLogRetirement(guild,store);
+    const retireOperations=createLogRetirement(guild,store,{operational:true});
+    void retireOperations().catch(error=>logError('Beheerkanalen archiveren mislukt',error));
     void retireLogs().catch(error=>logError('Logkanalen archiveren mislukt',error));
     void history().catch(error=>logError('Loghistorie importeren mislukt',error));
-    historyTimer=setInterval(()=>{void history().catch(error=>logError('Loghistorie importeren mislukt',error));void retireLogs().catch(error=>logError('Logkanalen archiveren mislukt',error));},30000);historyTimer.unref();
+    historyTimer=setInterval(()=>{void retireOperations().catch(error=>logError('Beheerkanalen archiveren mislukt',error));void history().catch(error=>logError('Loghistorie importeren mislukt',error));void retireLogs().catch(error=>logError('Logkanalen archiveren mislukt',error));},30000);historyTimer.unref();
     void serverLogs.start(guild).catch(error=>console.error('All logs starten mislukt',error?.code??error?.name));
     const refreshMoney=()=>Promise.all([
       syncChannelNames(guild,store).catch(error=>logError('Kanaalnamen aanpassen mislukt',error)),

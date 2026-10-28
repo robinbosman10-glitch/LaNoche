@@ -37,6 +37,7 @@ export function createStore(directory) {
     ...money,
     ...logsiteStore(db),
     ...logRetirementStore(db),
+    backupOperationalDatabase(){const path=join(directory,'before-operational-channel-retirement.sqlite');if(!existsSync(path))db.prepare('VACUUM INTO ?').run(path);},
     backupLogDatabase(){const path=join(directory,'before-log-channel-retirement.sqlite');if(!existsSync(path))db.prepare('VACUUM INTO ?').run(path);},
     ...logsiteAuthStore(db),
     ...vaultStore(db),

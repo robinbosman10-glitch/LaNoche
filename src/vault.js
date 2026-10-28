@@ -1,6 +1,7 @@
+import {logsiteOrigin} from './logsite-auth.js';
 import {webOnlyLogs,deliverLogsToWebsite} from './log-destination.js';
 import {normalizeItem} from './vault-store.js';
-import {ActionRowBuilder,ModalBuilder,TextInputBuilder,TextInputStyle,MessageFlags,PermissionFlagsBits as P,escapeMarkdown} from 'discord.js';
+import {ActionRowBuilder,ButtonBuilder,ButtonStyle,ModalBuilder,TextInputBuilder,TextInputStyle,MessageFlags,PermissionFlagsBits as P,escapeMarkdown} from 'discord.js';
 import {DateTime} from 'luxon';
 import {createHash} from 'node:crypto';
 import {branded} from './embeds.js';
@@ -10,7 +11,7 @@ export const vaultChannel='1561810060462661763';
 export const vaultLogChannel='1564634188278267914';
 export const vaultOverviewChannel='1564635987160600707';
 const isMoney=kind=>['wit','zwart'].includes(kind);
-const leadRole='1553521476378824796';
+export const leadRole='1553521476378824796';
 const active=new Set();
 export function vaultPayload({action,kind,date,amount,reason,actor,item}) {
   const added=action==='add';
@@ -33,6 +34,7 @@ export function vaultInput(fields,kind='wit') {
   return {date,amount,reason,...(isMoney(kind)?{}:{item:normalizeItem(fields.getTextInputValue('voorwerp'))})};
 }
 export async function handleVault(i,guildId,store) {
+  if(process.env.VAULT_MANAGEMENT==='web')return i.reply({content:'Beheer de kluis voortaan via de website. Je bestaande leidingrol blijft vereist.',flags:MessageFlags.Ephemeral,components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Kluis openen').setURL(logsiteOrigin()+'/#/kluis'))]});
   const reply=content=>i.reply({content,flags:MessageFlags.Ephemeral,allowedMentions:{parse:[]}});
   if(!i.inGuild() || i.guildId!==guildId)return reply('Dit command hoort bij La Noche.');
   if(i.channelId!==vaultChannel)return reply(`Gebruik /kluis alleen in <#${vaultChannel}>.`);
@@ -106,6 +108,7 @@ export function flushVaultLogs(guild,store) {
 
 const postRuns=new Map();
 export function flushVaultPosts(guild,store) {
+ if(process.env.VAULT_MANAGEMENT==='web'){for(const entry of store.pendingVaultPosts(guild.id))store.recordVault(entry.id,guild.id,{...entry,url:logsiteOrigin()+'/#/logs/vault'});return deliverLogsToWebsite(guild,store);}
  if(postRuns.has(guild.id))return postRuns.get(guild.id);
  const run=(async()=>{
   const pending=store.pendingVaultPosts(guild.id);

@@ -29,6 +29,7 @@ export function moneyPayload(store,guild) {
   return payload;
 }
 export function syncMoney(guild,store) {
+  if(process.env.OPERATIONAL_CHANNELS==='web')return deliverLogsToWebsite(guild,store);
   const previous=syncs.get(guild.id)??Promise.resolve();
   const next=previous.catch(()=>{}).then(async()=>{
     const channel=await guild.channels.fetch(moneyChannel);

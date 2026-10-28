@@ -23,6 +23,7 @@ export function logRetirementStore(db){
   },
   hasStructuredDiscordLog(guild,channel,message,time){
    for(const table of ['server_logs','blacklist_logs','vault_log_outbox','ticket_log_messages'])if(db.prepare(`SELECT 1 FROM ${table} WHERE guild=? AND message=?`).get(guild,message))return true;
+   if(db.prepare("SELECT 1 FROM vault_bookings WHERE guild=? AND url LIKE ?").get(guild,'%/'+message))return true;
    if(db.prepare('SELECT 1 FROM money_log_messages l JOIN money_transactions t ON t.id=l.id WHERE t.guild=? AND l.message=?').get(guild,message))return true;
    return !!db.prepare("SELECT 1 FROM audit_outbox WHERE guild=? AND json_extract(payload,'$.time')=?").get(guild,time);
   }

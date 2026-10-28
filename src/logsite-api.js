@@ -1,8 +1,10 @@
+import {handleVaultWrite} from './vault-web.js';
+import {leadRole} from './vault.js';
 import {logCategories} from './logsite-store.js';
 import {handlePotsWrite,potPermissions} from './pots-web.js';
 import {pots,shares} from './money-store.js';
 import {LOGSITE_OWNER} from './logsite-auth-store.js';
-import {retirementKey} from './log-retirement.js';
+import {retirementKey,operationalRetirementKey} from './log-retirement.js';
 import {getMembers} from './member-cache.js';
 import {settings} from './settings.js';
 import {currentLogsiteUser,logsiteOrigin} from './logsite-auth.js';
@@ -18,23 +20,23 @@ export async function handleLogsite(i,store,guildId){
 export function createLogsiteApi(store,getClient,guildId){
  let busy=0;
  return async(req,res)=>{
-  const url=new URL(req.url,'http://localhost');if(!/^\/t\/[a-f0-9]{64}(\/download)?$/.test(url.pathname)&&!['/api/pots/preview','/api/pots/book','/api/pots','/api/vault','/api/logsite','/api/members','/api/log-retirement','/api/log-attachment'].includes(url.pathname))return false;
+  const url=new URL(req.url,'http://localhost');if(!/^\/t\/[a-f0-9]{64}(\/download)?$/.test(url.pathname)&&!['/api/vault/preview','/api/vault/book','/api/operations-retirement','/api/pots/preview','/api/pots/book','/api/pots','/api/vault','/api/logsite','/api/members','/api/log-retirement','/api/log-attachment'].includes(url.pathname))return false;
   const send=(status,data)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(data));return true;};
-  if(req.method!=='GET'&&!['/api/pots/preview','/api/pots/book'].includes(url.pathname))return send(405,{error:'Alleen lezen toegestaan.'});
+  if(req.method!=='GET'&&!['/api/vault/preview','/api/vault/book','/api/pots/preview','/api/pots/book'].includes(url.pathname))return send(405,{error:'Alleen lezen toegestaan.'});
   if(url.pathname.startsWith('/t/')&&req.headers.host!==new URL(logsiteOrigin()).host){res.writeHead(303,{Location:logsiteOrigin()+url.pathname,'Cache-Control':'no-store'});res.end();return true;}
   const session=currentLogsiteUser(req,store,guildId);
   if(!session)return send(401,{error:'Log eerst in met Discord.'});
   if(!store.logsiteAllowed(guildId,session.user))return send(403,{error:'Je Discord-ID heeft geen toegang tot deze website.'});
   const pages=store.logsitePages(guildId,session.user),can=page=>pages.includes(page);
   if(url.pathname.startsWith('/t/')){if(!can('tickets'))return send(403,{error:'Geen toegang tot tickets en transcripts.'});return false;}
-  const required={'/api/members':'roster','/api/vault':'safe','/api/pots':'pots','/api/pots/preview':'pots','/api/pots/book':'pots'}[url.pathname];
+  const required={'/api/vault/preview':'safe','/api/vault/book':'safe','/api/members':'roster','/api/vault':'safe','/api/pots':'pots','/api/pots/preview':'pots','/api/pots/book':'pots'}[url.pathname];
   if(required&&!can(required))return send(403,{error:'Je hebt geen toegang tot deze pagina.'});
   if(url.pathname==='/api/logsite'){
    const cat=url.searchParams.get('cat')||'all';if(!can(cat==='all'?'overview':cat))return send(403,{error:'Je hebt geen toegang tot deze logpagina.'});
   }
-  if(url.pathname==='/api/log-retirement'){
+  if(['/api/log-retirement','/api/operations-retirement'].includes(url.pathname)){
    if(session.user!==LOGSITE_OWNER)return send(403,{error:'Alleen de beheerder.'});
-   return send(200,JSON.parse(store.getMeta(retirementKey(guildId))||'{"channels":{},"done":false}'));
+   return send(200,JSON.parse(store.getMeta(url.pathname==='/api/operations-retirement'?operationalRetirementKey(guildId):retirementKey(guildId))||'{"channels":{},"done":false}'));
   }
   if(url.pathname==='/api/log-attachment'){
    if(session.user!==LOGSITE_OWNER&&!can(store.attachmentLogCategory(guildId,url.searchParams.get('id')||'')))return send(403,{error:'Geen toegang tot deze bijlage.'});
@@ -46,6 +48,7 @@ export function createLogsiteApi(store,getClient,guildId){
   if(busy>=3)return send(429,{error:'Te veel verzoeken. Probeer het zo opnieuw.'});
   busy++;
   try{
+   if(['/api/vault/preview','/api/vault/book'].includes(url.pathname))return await handleVaultWrite(req,send,store,guild,session,url.pathname);
    if(['/api/pots/preview','/api/pots/book'].includes(url.pathname))return await handlePotsWrite(req,send,store,guild,session,url.pathname);
    if(url.pathname==='/api/pots'){
     const balances=store.moneyBalances(guildId);
@@ -54,7 +57,7 @@ export function createLogsiteApi(store,getClient,guildId){
    if(url.pathname==='/api/vault'){
     const balances=store.vaultBalances(guildId);
     const recent=store.recentVaultBookings(guildId).map(e=>({...e,person:guild.members.cache.get(e.actor)?.displayName||client.users.cache.get(e.actor)?.username||e.actor}));
-    return send(200,{balances,recent,updatedAt:Date.now()});
+    return send(200,{permissions:{manage:!!guild.members.cache.get(session.user)?.roles.cache.has(leadRole)},balances,recent,updatedAt:Date.now()});
    }
    if(url.pathname==='/api/members'){
     const members=await getMembers(guild);const ranks=[...settings.ranks].reverse();

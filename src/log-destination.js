@@ -14,3 +14,5 @@ export function deliverLogsToWebsite(guild,store){
  store.markWebsiteDelivery(guild.id);
  return Promise.resolve();
 }
+
+export const retiredOperationalChannels=new Map([['1561810060462661763','vault'],['1563644518991925318','money']]);

@@ -170,3 +170,24 @@ test('page grants scope data, aggregate counts, direct URLs, attachments and pot
  assert.equal((await dispatch(api,'/api/pots/book','POST',h,'{}')).status,403);
  store.updateLogsiteAccount(G,LOGSITE_OWNER,V,'Overview only',['overview']);const empty=JSON.parse((await dispatch(api,'/api/logsite','GET',h)).body);assert.equal(empty.total,0);assert.deepEqual(empty.counts,[]);
 }));
+test('vault web reuses atomic stock ledger, permissions, validation and idempotent submissions',temporary(async store=>{
+ const oldWeb=process.env.VAULT_MANAGEMENT;process.env.VAULT_MANAGEMENT='web';
+ try{
+ const {leadRole}=await import('../src/vault.js');const roles=new Set([leadRole]);const client=mockClient(),guild=client.guilds.cache.get(G);guild.members.fetch=async()=>({roles:{cache:roles}});
+ store.changeLogsiteAccess(G,LOGSITE_OWNER,V,true,{label:'Lead',pages:['safe','vault']});const token=store.loginLogsite(G,V,'Lead'),session=store.logsiteSession(token);
+ const h={cookie:sessionCookie+'='+token,origin,'x-csrf-token':session.csrf,'content-type':'application/json'},api=createLogsiteApi(store,()=>client,G),send=(path,body,headers=h)=>dispatch(api,path,'POST',headers,JSON.stringify(body));
+ const add={kind:'wapen',action:'add',date:'28/10/2026',amount:'2',item:'pistolen',reason:'Inkoop',requestId:'11111111-1111-4111-8111-111111111111'};
+ assert.equal((await send('/api/vault/book',add,{...h,origin:'https://evil.test'})).status,403);assert.equal((await send('/api/vault/book',add,{...h,'x-csrf-token':'bad'})).status,403);
+ const preview=await send('/api/vault/preview',add);assert.equal(preview.status,200);assert.equal(JSON.parse(preview.body).after,2);assert.deepEqual(store.vaultBalances(G),[]);
+ assert.equal((await send('/api/vault/book',add)).status,200);assert.equal(JSON.parse((await send('/api/vault/book',add)).body).changed,false);assert.equal(store.vaultBalances(G)[0].amount,2);
+ assert.equal((await send('/api/vault/book',{...add,amount:'3'})).status,409);
+ const remove={...add,action:'remove',amount:'2',requestId:'22222222-2222-4222-8222-222222222222'};assert.equal((await send('/api/vault/book',{...remove,amount:'3'})).status,400);assert.equal(store.vaultBalances(G)[0].amount,2);
+ assert.equal((await send('/api/vault/book',remove)).status,200);assert.equal(JSON.parse((await send('/api/vault/book',remove)).body).changed,false);assert.equal(store.vaultBalances(G)[0].amount,0);
+ const money={...add,kind:'wit',amount:'350k',requestId:'33333333-3333-4333-8333-333333333333'};assert.equal((await send('/api/vault/book',money)).status,200);assert.equal(store.vaultBalances(G).find(b=>b.kind==='wit').amount,350000);
+ assert.equal((await send('/api/vault/preview',{...money,date:'31/02/2026'})).status,400);assert.equal((await send('/api/vault/preview',{...money,reason:''})).status,400);
+ assert.equal(store.pendingVaultPosts(G).length,0);assert.ok(store.queryWebLogs(G,{cat:'vault'}).total>=3);
+ roles.clear();assert.equal((await send('/api/vault/preview',add)).status,403);roles.add(leadRole);
+ store.updateLogsiteAccount(G,LOGSITE_OWNER,V,'Lead',['vault']);assert.equal((await send('/api/vault/book',money)).status,403);
+ store.changeLogsiteAccess(G,LOGSITE_OWNER,V,false);assert.equal((await send('/api/vault/book',money)).status,401);
+ }finally{if(oldWeb===undefined)delete process.env.VAULT_MANAGEMENT;else process.env.VAULT_MANAGEMENT=oldWeb;}
+}));
