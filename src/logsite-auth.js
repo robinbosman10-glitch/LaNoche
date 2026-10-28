@@ -19,7 +19,7 @@ export function discordAvatar(user){
 export function createLogsiteAuth(store,getClient,guildId,{env=process.env,fetcher=fetch}={}){
  const origin=logsiteOrigin(env),callback=origin+'/auth/discord/callback';
  const assets=new Map([['/',['index.html','text/html; charset=utf-8']],['/index.html',['index.html','text/html; charset=utf-8']],['/app.js',['app.js','text/javascript; charset=utf-8']],['/style.css',['style.css','text/css; charset=utf-8']]].map(([path,[file,type]])=>[path,{type,content:readFileSync(new URL('../web/'+file,import.meta.url))}]));
- for(const name of ['inner-circle-scene','inner-circle-marble'])assets.set('/brand/'+name+'.webp',{type:'image/webp',content:readFileSync(new URL('../assets/'+name+'.webp',import.meta.url))});
+ for(const name of ['inner-circle-scene','inner-circle-marble','robin-development'])assets.set('/brand/'+name+'.webp',{type:'image/webp',content:readFileSync(new URL('../assets/'+name+'.webp',import.meta.url))});
  assets.set('/brand/logo.gif',{type:'image/gif',content:readFileSync(new URL('../assets/ticket-logo.gif',import.meta.url))});
  let authWindow=0,authCount=0;
  return async(req,res)=>{
