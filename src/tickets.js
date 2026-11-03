@@ -112,6 +112,34 @@ async function openTicket(i,store) {
   });
 }
 export function mayManage(ticket,member) { return member.permissions.has(P.Administrator) || member.roles.cache.has(settings.allTicketRole) || Boolean(ticket.support && member.roles.cache.has(ticket.support)); }
+async function lockTicketApplicant(i,ticket) {
+  const deny={SendMessages:false,AddReactions:false,CreatePublicThreads:false,CreatePrivateThreads:false,SendMessagesInThreads:false};
+  const edit=channel=>channel.permissionOverwrites.edit(ticket.user,deny,{type:OverwriteType.Member});
+  const missingOverwrite=error=>error.code===10009 || error.code===10007;
+  try { await edit(i.channel); return; }
+  catch(error) { if(!missingOverwrite(error)) throw error; }
+
+  // Discord rejects member overwrites for applicants who left the guild.
+  // A missing overwrite alone is not proof they left; verify via REST.
+  try { await i.guild.members.fetch({user:ticket.user,force:true}); }
+  catch(error) {
+    if(error.code!==10007) throw error;
+    // Remove any old direct access so the applicant cannot regain it on rejoin.
+    try { await i.channel.permissionOverwrites.delete(ticket.user,'Ticket gesloten na vertrek van aanvrager'); }
+    catch(cleanupError) { if(cleanupError.code!==10009) throw cleanupError; }
+    return;
+  }
+
+  // For a current member, preserve the read-only guarantee. Refresh once
+  // before retrying so a stale channel cache cannot overwrite newer settings.
+  const channel=await i.guild.channels.fetch(ticket.channel,{force:true});
+  try { await edit(channel); }
+  catch(error) {
+    if(!missingOverwrite(error)) throw error;
+    console.error('Ticket sluiten: Discord weigert persoonlijke kanaalrechten',{channel:ticket.channel,code:error.code});
+    throw new UserError('Discord kon de kanaalrechten van de aanvrager niet aanpassen. Het ticket blijft open. Probeer het opnieuw of laat het beheer de rechten van dit kanaal nakijken.');
+  }
+}
 export async function handleTicketInteraction(i,guildId,store) {
   if(!i.inGuild() || i.guildId!==guildId) return i.reply({content:'Dit paneel hoort bij de La Noche-server.',flags:MessageFlags.Ephemeral});
   await i.deferReply({flags:MessageFlags.Ephemeral});
@@ -144,7 +172,7 @@ export async function handleTicketInteraction(i,guildId,store) {
         ticket.claimed=null;
       } else if(action==='confirm-close') {
         ticket.transcript=await captureTranscript(i.channel,ticket);
-        await i.channel.permissionOverwrites.edit(ticket.user,{SendMessages:false,AddReactions:false,CreatePublicThreads:false,CreatePrivateThreads:false,SendMessagesInThreads:false}, {type:OverwriteType.Member});
+        await lockTicketApplicant(i,ticket);
         ticket.closed=1;
       } else throw new UserError('Onbekende ticketactie.');
       store.updateTicket(ticket.channel,ticket);

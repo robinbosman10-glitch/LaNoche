@@ -4,7 +4,7 @@ import {mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {DatabaseSync} from 'node:sqlite';
 import {join} from 'node:path';
-import {ChannelType,PermissionsBitField,PermissionFlagsBits as P} from 'discord.js';
+import {ChannelType,Collection,PermissionsBitField,PermissionFlagsBits as P} from 'discord.js';
 import {settings} from '../src/settings.js';
 import {createStore} from '../src/store.js';
 import {panelPayload,handleTicketInteraction,handleTicketMessage,syncTicketAccess} from '../src/tickets.js';
@@ -169,6 +169,69 @@ test('closing works when ticket owner is absent from Discord user cache after re
  assert.equal(requests.length,1);assert.equal(requests[0][1].body.type,1);
  assert.equal(s.store.ticket('ticket').closed,1);
  assert.equal(i.replies.at(-1).content,'Ticket gesloten.');
+});
+
+test('a departed applicant no longer blocks closing or saving the transcript',async t=>{
+ const s=setup(t);await handleTicketInteraction(s.interaction('open'),'g',s.store);
+ const i=s.interaction('confirm-close','staff');
+ const removed=[];
+ i.guild.members.fetch=async ({user,force})=>{
+   assert.equal(force,true);
+   if(user==='staff')return admin;
+   assert.equal(user,'user');
+   throw Object.assign(new Error('Unknown Member'),{code:10007});
+ };
+ i.channel.permissionOverwrites={
+   cache:new Map([['user',{id:'user'}]]),
+   edit:async()=>{throw Object.assign(new Error('Unknown Permission Overwrite'),{code:10009});},
+   delete:async id=>{removed.push(id);}
+ };
+ i.channel.messages.fetch=async options=>typeof options==='object'?
+   new Collection([['123',{id:'123',createdTimestamp:Date.now(),author:{username:'Applicant'},content:'Mijn oorspronkelijke aanvraag'}]]):
+   {edit:async()=>{}};
+ await handleTicketInteraction(i,'g',s.store);
+ assert.deepEqual(removed,['user']);
+ assert.equal(s.store.ticket('ticket').closed,1);
+ const audit=s.store.pendingAudit('g').at(-1);
+ assert.equal(audit.action,'closed');assert.equal(audit.transcript.count,1);
+ assert.match(audit.transcript.html,/Mijn oorspronkelijke aanvraag/);
+ assert.equal(s.sends.at(-1).components[0].toJSON().components[0].custom_id,'ln-ticket:delete-request');
+ assert.equal(i.replies.at(-1).content,'Ticket gesloten.');
+});
+
+test('a missing overwrite is retried against a fresh channel for an applicant still in the server',async t=>{
+ const s=setup(t);await handleTicketInteraction(s.interaction('open'),'g',s.store);
+ const i=s.interaction('confirm-close','staff');
+ const updates=[];
+ i.guild.members.fetch=async ({user,force})=>{
+   assert.equal(force,true);
+   if(user==='staff')return admin;
+   assert.equal(user,'user');
+   return {id:user};
+ };
+ i.channel.permissionOverwrites.edit=async()=>{throw Object.assign(new Error('Unknown Permission Overwrite'),{code:10009});};
+ i.guild.channels.fetch=async (id,options)=>{
+   assert.equal(id,'ticket');assert.equal(options?.force,true);
+   return {permissionOverwrites:{edit:async(...args)=>updates.push(args)}};
+ };
+ await handleTicketInteraction(i,'g',s.store);
+ assert.equal(updates.length,1);
+ assert.equal(updates[0][0],'user');assert.equal(updates[0][1].SendMessages,false);
+ assert.equal(s.store.ticket('ticket').closed,1);
+ assert.equal(i.replies.at(-1).content,'Ticket gesloten.');
+});
+
+test('closing stays blocked when a present applicant cannot be made read-only',async t=>{
+ const s=setup(t);await handleTicketInteraction(s.interaction('open'),'g',s.store);
+ const i=s.interaction('confirm-close','staff');
+ i.guild.members.fetch=async ({user})=>user==='staff'?admin:{id:user};
+ const missing=Object.assign(new Error('Unknown Permission Overwrite'),{code:10009});
+ i.channel.permissionOverwrites.edit=async()=>{throw missing;};
+ i.guild.channels.fetch=async()=>({permissionOverwrites:{edit:async()=>{throw missing;}}});
+ await handleTicketInteraction(i,'g',s.store);
+ assert.equal(s.store.ticket('ticket').closed,0);
+ assert.equal(s.store.pendingAudit('g').length,0);
+ assert.match(i.replies.at(-1).content,/kanaalrechten|toegang|rechten/i);
 });
 
 test('missing original message does not block closed notice and delete button',async t=>{
