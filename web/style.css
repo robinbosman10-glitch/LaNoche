@@ -129,3 +129,8 @@ html[data-roster="inner-circle"] .ic-leadership .ic-member-copy b{font-size:12px
 
 
 #accountsDialog .page-option{min-width:0;cursor:pointer;line-height:1.5}#accountsDialog .page-option input[type=checkbox]{display:block;flex:0 0 16px;width:16px;height:16px;margin:0;padding:0}#accountsDialog .page-option span{min-width:0;overflow-wrap:anywhere}#accountsDialog .page-option:has(input:checked){background:var(--orange-dim);box-shadow:inset 0 0 0 1px var(--orange)}#accountsDialog .account-pages{min-width:0}
+
+/* Avoid recompositing the animated dashboard behind account management. */
+#accountsDialog::backdrop{background:#0c0e11;backdrop-filter:none;-webkit-backdrop-filter:none}
+html[data-account-editor="open"] #dashboard{visibility:hidden}
+#accountsDialog{isolation:isolate}
