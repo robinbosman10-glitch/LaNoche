@@ -35,7 +35,7 @@ if(location.hash.startsWith('#connect='))history.replaceState(null,'',location.p
 function logoImage(img,url){img.src=url;img.onerror=()=>{img.onerror=null;img.src='/brand/logo.gif';};}
 async function loadIdentity(){
  try{
-  const r=await fetch('/api/me',{cache:'no-store',credentials:'same-origin'});if(!r.ok)throw new Error();const me=await r.json();identity=me.user;
+  const r=await fetch('/api/me',{cache:'no-store',credentials:'same-origin',signal:AbortSignal.timeout(15000)});if(!r.ok)throw new Error();const me=await r.json();identity=me.user;
   document.querySelectorAll('.server-logo').forEach(img=>logoImage(img,me.guild.icon));$('#serverName').textContent=me.guild.name;
   $('#loginButton').href=me.loginUrl;
   const allowed=!!identity?.allowed;connection=allowed?{origin:location.origin}:null;
@@ -68,10 +68,11 @@ function nav(){
  for(const group of ['Discord','La Noche']){const entries=Object.entries(cats).filter(([key,c])=>c.group===group&&canPage(key));if(!entries.length)continue;html+=`<div class="navgroup">${group}</div>`;for(const [key,c] of entries)html+=`<a class="navitem ${active===key?'active':''}" href="#/logs/${key}">${icon(c.icon)}<span class="navtext">${esc(c.label)}</span><span class="navcount">${data?counts[key]||0:'—'}</span></a>`;}
  $('#nav').innerHTML=html;
 }
+const chartHourFormatter=new Intl.DateTimeFormat('nl-NL',{timeZone:'Europe/Amsterdam',hour:'2-digit',hourCycle:'h23'});
 const fmtTime=t=>new Date(t).toLocaleString('nl-NL',{timeZone:'Europe/Amsterdam',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'});
 function render(){
  nav();const s=data?.stats;$('#stats').innerHTML=[['Logmomenten',s?.total,'In deze categorie en periode','chart'],['Uitvoerders / leden',s?.people,'Unieke geregistreerde personen','users'],['Afgelopen uur',s?.recent||0,'Binnen deze selectie','message'],['Soorten acties',s?.types,'Geregistreerde gebeurtenissen','grid']].map(([label,n,note,ic])=>`<article class="stat"><div class="stat-top">${label}${icon(ic)}</div><div class="stat-main"><div class="stat-value">${data?Number(n||0).toLocaleString('nl-NL'):'—'}</div></div><div class="stat-note">${note}</div></article>`).join('');
- const buckets=Array(24).fill(0);for(const h of data?.hours||[])buckets[Number(new Intl.DateTimeFormat('nl-NL',{timeZone:'Europe/Amsterdam',hour:'2-digit',hourCycle:'h23'}).format(h.time))]+=h.n;const max=Math.max(...buckets,1);$('#chart').innerHTML=buckets.map((n,i)=>`<div class="bar" style="height:${n?n/max*100:0}%"><span class="bartip">${i}:00 · ${n} logs</span></div>`).join('');
+ const buckets=Array(24).fill(0);for(const h of data?.hours||[])buckets[Number(chartHourFormatter.format(h.time))]+=h.n;const max=Math.max(...buckets,1);$('#chart').innerHTML=buckets.map((n,i)=>`<div class="bar" style="height:${n?n/max*100:0}%"><span class="bartip">${i}:00 · ${n} logs</span></div>`).join('');
  $('#distribution').innerHTML=(data?.actions||[]).slice(0,4).map(a=>`<div class="distrow"><span title="${esc(a.action)}">${esc(a.action)}</span><div class="disttrack"><div class="distfill" style="width:${s?.total?a.n/s.total*100:0}%"></div></div><b>${a.n}</b></div>`).join('')||'<p class="detailhint" style="padding:20px">Nog geen gegevens in deze selectie.</p>';
  $('#tabs').innerHTML=[{action:'all',n:s?.total||0},...(data?.actions||[])].map(a=>`<button class="tab ${a.action===actionFilter?'active':''}" data-filter="${esc(a.action)}">${a.action==='all'?'Alle gebeurtenissen':esc(a.action)}<small>${a.n}</small></button>`).join('');
  $('#count').textContent=data?.total??'—';$('#rows').innerHTML=(data?.logs||[]).map((l,i)=>`<tr tabindex="0" data-index="${i}" aria-label="Logdetails: ${esc(l.action)}"><td><div class="eventcell"><span class="eventicon ${esc(l.cat)}">${icon(cats[l.cat]?.icon)}</span><div><b>${esc(l.action)}</b><small>${esc(cats[l.cat]?.label||l.cat)}</small></div></div></td><td><div class="membercell"><span class="avatar">${esc(l.person.slice(0,2).toUpperCase())}</span>${esc(l.person)}</div></td><td><span class="channel">${esc(l.channel)}</span></td><td class="timestamp">${fmtTime(l.time)}<small>Europe/Amsterdam</small></td><td class="arrow">›</td></tr>`).join('');
@@ -86,8 +87,10 @@ function banner(){
  b.innerHTML=`<b>${warnings.length?'Controleer logdekking':'Verbonden met '+esc(data.guild.name)}</b><p>${esc(warnings.join(' ')||c.history)} <span>Laatste synchronisatie: ${fmtTime(lastSuccess)}.</span></p>`;
 }
 async function refresh(){
+ clearTimeout(timer);
+ if(document.hidden||document.querySelector('dialog[open]')){if(connection&&!paused)timer=setTimeout(refresh,interval);return;}
  if(connection){
-  try{const r=await fetch('/api/me',{cache:'no-store',credentials:'same-origin'});if(!r.ok)throw new Error();const me=await r.json();
+  try{const r=await fetch('/api/me',{cache:'no-store',credentials:'same-origin',signal:AbortSignal.timeout(15000)});if(!r.ok)throw new Error();const me=await r.json();
    if(!me.user?.allowed){await loadIdentity();return;}
    if(JSON.stringify(me.user.pages)!==JSON.stringify(identity?.pages)){
     identity=me.user;data=null;roster=null;vault=null;potsData=null;warehousesData=null;$('#warehouseContents').replaceChildren();$('#memberGroups').replaceChildren();$('#vaultContents').replaceChildren();$('#potsContents').replaceChildren();closeDetail();route();return;
@@ -170,15 +173,17 @@ window.addEventListener('hashchange',route);$('#date').textContent=new Date().to
 let accountPageOptions=[];
 function pageChecks(selected=[]){return accountPageOptions.map(p=>`<label class="page-option"><input type="checkbox" name="page" value="${esc(p.id)}" ${selected.includes(p.id)?'checked':''}><span>${esc(p.label)}</span></label>`).join('');}
 async function loadAccounts(){
- const r=await fetch('/api/access',{credentials:'same-origin',cache:'no-store'});const result=await r.json();if(!r.ok)throw new Error(result.error);
+ const r=await fetch('/api/access',{credentials:'same-origin',cache:'no-store',signal:AbortSignal.timeout(15000)});const result=await r.json();if(!r.ok)throw new Error(result.error);
  accountPageOptions=result.pages;
  if(!$('#newAccountPages').children.length)$('#newAccountPages').innerHTML=pageChecks();
  $('#accountList').innerHTML=`<div class="account-row"><div><b>Vaste beheerder</b><small>${esc(result.owner)}</small></div><span class="detailbadge">Alle pagina’s · vast</span></div>`+result.users.map(u=>`<details class="account-editor"><summary><span><b>${esc(u.label||'Account zonder interne naam')}</b><small>${esc(u.user)}</small></span><span class="detailbadge">${u.pages.length} / ${accountPageOptions.length} pagina’s</span></summary><form data-account="${esc(u.user)}"><label>Interne naam<input name="label" maxlength="80" value="${esc(u.label)}" placeholder="Naam voor jouw overzicht" autocomplete="off"></label><fieldset class="account-pages"><legend>Toegestane pagina’s</legend><div class="account-bulk"><button class="button" type="button" data-check="all">Alles selecteren</button><button class="button" type="button" data-check="none">Alles uitzetten</button></div><div class="page-options">${pageChecks(u.pages)}</div></fieldset><div class="account-bulk"><button class="button accent" type="submit">Naam en pagina’s opslaan</button><button class="button" type="button" data-remove="${esc(u.user)}">Account verwijderen</button></div><p class="account-result" role="status"></p></form></details>`).join('');
 }
-$('#accountsButton').onclick=async()=>{$('#accountsDialog').showModal();$('#accountMessage').textContent='Laden…';try{await loadAccounts();$('#accountMessage').textContent='';}catch(e){$('#accountMessage').textContent=e.message;}};
+$('#accountsButton').onclick=async()=>{$('#accountsDialog').showModal();clearTimeout(timer);request?.abort();++serial;$('#accountMessage').textContent='Laden…';try{await loadAccounts();$('#accountMessage').textContent='';}catch(e){$('#accountMessage').textContent=e.message;}};
 $('#closeAccounts').onclick=()=>$('#accountsDialog').close();
+$('#accountsDialog').addEventListener('close',()=>{if(connection&&!paused)refresh();});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){clearTimeout(timer);request?.abort();++serial;}else if(connection&&!paused)refresh();});
 async function accountRequest(method,body){
- const r=await fetch('/api/access',{method,credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRF-Token':identity.csrf},body:JSON.stringify(body)});const result=await r.json();if(!r.ok)throw new Error(result.error);return result;
+ const r=await fetch('/api/access',{method,credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRF-Token':identity.csrf},body:JSON.stringify(body),signal:AbortSignal.timeout(15000)});const result=await r.json();if(!r.ok)throw new Error(result.error);return result;
 }
 const selectedPages=form=>[...form.querySelectorAll('input[name="page"]:checked')].map(e=>e.value);
 function bulkPages(e){const b=e.target.closest('[data-check]');if(!b)return false;for(const c of b.closest('fieldset').querySelectorAll('input[type="checkbox"]'))c.checked=b.dataset.check==='all';return true;}
@@ -386,3 +391,4 @@ $('#warehouseConfirm').onclick=async()=>{
  catch(e){$('#warehouseMessage').textContent=e.name==='TimeoutError'||e.message==='Failed to fetch'?'Geen bevestiging ontvangen. Klik opnieuw op bevestigen; dezelfde boeking wordt niet dubbel verwerkt.':e.message;}
  finally{warehouseBusy=false;$('#warehouseConfirm').disabled=false;$('#warehouseBack').disabled=false;}
 };
+
