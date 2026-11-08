@@ -62,7 +62,7 @@ export function createLogsiteApi(store,getClient,guildId){
     return send(200,{permissions:{manage:!!guild.members.cache.get(session.user)?.roles.cache.has(leadRole)},balances,recent,updatedAt:Date.now()});
    }
    if(url.pathname==='/api/members'){
-    const members=await getMembers(guild);const ranks=[...settings.ranks].reverse();
+    const members=await getMembers(guild);const ranks=[...settings.memberlistRanks].reverse();
     const groups=ranks.map(id=>({id,name:guild.roles.cache.get(id)?.name||id,members:[]}));
     for(const member of members.values()){
      if(member.user.bot)continue;const index=ranks.findIndex(id=>member.roles.cache.has(id));if(index<0)continue;

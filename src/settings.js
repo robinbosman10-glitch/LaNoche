@@ -23,3 +23,6 @@ export const settings = {
   // Van laag naar hoog; de ledenlijst toont deze in omgekeerde volgorde.
   ranks: ['1311587016928133160', '1311587015761985578', '1553523466035011584', '1335747208762626139', '1326190832822390888', '1461805455553728786', '1311585576717385773', '1399490155194220614'],
 };
+
+// Ledenlijsten: Hitman tussen Veterano en Comandante (laag naar hoog).
+settings.memberlistRanks = settings.ranks.flatMap(id => id === '1335747208762626139' ? [id, '1568907803773378671'] : [id]);

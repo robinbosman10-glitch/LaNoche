@@ -180,7 +180,7 @@ function scheduleBlacklist(guild) {
 client.on(Events.ChannelCreate,channel=>{if(channel.guild)scheduleBlacklist(channel.guild);});
 client.on(Events.ChannelUpdate,(_,channel)=>{if(channel.guild)scheduleBlacklist(channel.guild);});
 client.on(Events.GuildRoleUpdate,(_,role)=>scheduleBlacklist(role.guild));
-function relevantMember(member) { return member.guild.id === config.guildId && settings.ranks.some(id=>member.roles.cache.has(id)); }
+function relevantMember(member) { return member.guild.id === config.guildId && settings.memberlistRanks.some(id=>member.roles.cache.has(id)); }
 client.on(Events.GuildMemberUpdate, (before, after) => {
   scheduleBlacklist(after.guild);
   if (relevantMember(before) || relevantMember(after)) liveRefresh?.schedule();
