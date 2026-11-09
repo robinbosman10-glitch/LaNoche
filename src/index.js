@@ -1,3 +1,6 @@
+import {createEmbedStudioApi} from './embed-studio-api.js';
+import {createPermissionsMapApi} from './permissions-map-api.js';
+import {createFormsApi} from './forms-api.js';
 import {createBotSettingsApi} from './bot-settings-api.js';
 import {loadBotSettings} from './bot-settings.js';
 import {createWarehouseApi} from './warehouse-api.js';
@@ -45,7 +48,10 @@ const logApi=createLogsiteApi(store,()=>client,config.guildId);
 const siteActivityApi=createSiteActivityApi(store,config.guildId);
 const warehouseApi=createWarehouseApi(store,()=>client,config.guildId);
 const botSettingsApi=createBotSettingsApi(store,()=>client,config.guildId);
-const web=createTranscriptServer(store,async(req,res)=>(await logAuth(req,res))||(await siteActivityApi(req,res))||(await botSettingsApi(req,res))||(await warehouseApi(req,res))||(await logApi(req,res)));
+const embedStudioApi=createEmbedStudioApi(store,()=>client,config.guildId);
+const permissionsMapApi=createPermissionsMapApi(store,()=>client,config.guildId);
+const formsApi=createFormsApi(store,()=>client,config.guildId);
+const web=createTranscriptServer(store,async(req,res)=>(await logAuth(req,res))||(await siteActivityApi(req,res))||(await botSettingsApi(req,res))||(await embedStudioApi(req,res))||(await permissionsMapApi(req,res))||(await formsApi(req,res))||(await warehouseApi(req,res))||(await logApi(req,res)));
 web.on('error',()=>{console.error('Transcriptwebsite starten mislukt. Controleer PORT.');process.exit(1);});
 web.listen(Number(process.env.PORT||3000),'0.0.0.0');
 const intents=[GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages,GatewayIntentBits.GuildVoiceStates,GatewayIntentBits.GuildModeration,GatewayIntentBits.GuildMessageReactions,GatewayIntentBits.GuildInvites,GatewayIntentBits.GuildScheduledEvents,GatewayIntentBits.AutoModerationExecution];

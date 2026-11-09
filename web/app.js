@@ -29,6 +29,16 @@ let theme=read('ln-theme','system');interval=read('ln-interval',10000);if(![5000
 function applyTheme(){document.documentElement.dataset.theme=document.documentElement.dataset.roster==='inner-circle'?'dark':theme==='system'?(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'):theme;}
 applyTheme();matchMedia('(prefers-color-scheme: light)').addEventListener('change',applyTheme);
 $('#themeToggle').onclick=()=>{theme=document.documentElement.dataset.theme==='light'?'dark':'light';localStorage.setItem('ln-theme',JSON.stringify(theme));applyTheme();};
+const toolPages={studio:{hash:'#/embedstudio',title:'Embedstudio',description:'Ontwerpen, bewaren en publiceren in Discord.',icon:'message'},permissions:{hash:'#/rechtenkaart',title:'Discord-rechtenkaart',description:'Bekijk per rol of lid wat toegankelijk is en waarom.',icon:'shield'},forms:{hash:'#/formulieren',title:'Formulieren',description:'Formulieren invullen. Website Development beheert de vragen en inzendingen.',icon:'grid'}};
+let mountedTool=null;
+function resetToolHost(){const host=$('#toolsPanel');for(const key of ['onclick','oninput','onchange','onsubmit','onkeydown'])host[key]=null;host.replaceChildren();}
+function clearTools(){for(const module of Object.values(window.lnTools||{}))module.clear?.();mountedTool=null;resetToolHost();$('#toolsPanel').hidden=true;}
+function showTool(){
+ if(!toolPages[active]||!canPage(active))return;
+ const module=window.lnTools?.[active];if(!module){$('#toolsPanel').textContent='Dit onderdeel kon niet laden. Ververs de pagina.';return;}
+ if(mountedTool!==active){if(mountedTool)window.lnTools[mountedTool]?.close?.();resetToolHost();mountedTool=active;const opening=active;Promise.resolve(module.open($('#toolsPanel'),identity)).catch(()=>{if(mountedTool===opening)$('#toolsPanel').textContent='Dit onderdeel kon niet laden. Open het opnieuw.';});}
+}
+window.lnRequireLogin=()=>{clearTools();return loadIdentity();};
 let botSettingsData=null,botSettingsDirty=false,botSettingsBusy=false,botSettingsRequest=0;
 let identity=null,roster=null,vault=null,potsData=null,siteActivityData=null,siteActivityPage=1,siteVisitRecorded=false,warehousesData=null;
 try{sessionStorage.removeItem('ln-connection');}catch{}
@@ -36,7 +46,7 @@ if(location.hash.startsWith('#connect='))history.replaceState(null,'',location.p
 function logoImage(img,url){img.src=url;img.onerror=()=>{img.onerror=null;img.src='/brand/logo.gif';};}
 async function loadIdentity(){
  try{
-  const r=await fetch('/api/me',{cache:'no-store',credentials:'same-origin',signal:AbortSignal.timeout(15000)});if(!r.ok)throw new Error();const me=await r.json();identity=me.user;
+  const r=await fetch('/api/me',{cache:'no-store',credentials:'same-origin',signal:AbortSignal.timeout(15000)});if(!r.ok)throw new Error();const me=await r.json();if(identity?.id!==me.user?.id)clearTools();identity=me.user;
   document.querySelectorAll('.server-logo').forEach(img=>logoImage(img,me.guild.icon));$('#serverName').textContent=me.guild.name;
   $('#loginButton').href=me.loginUrl;
   const allowed=!!identity?.allowed;connection=allowed?{origin:location.origin}:null;
@@ -46,11 +56,11 @@ async function loadIdentity(){
   $('#authMessage').textContent=identity&&!allowed?`Je bent ingelogd als ${identity.name} (${identity.id}), maar dit Discord-ID heeft geen toegang. Vraag de beheerder om je ID toe te voegen.`:!me.configured?'Discord-login is nog niet geconfigureerd. De beheerder moet de OAuth-instellingen afronden.':errors[authError]||'Log in met Discord om het logdashboard te openen.';
   if(identity){$('#profileName').textContent=identity.name;$('#profileRole').textContent=identity.admin?'Website Development':'Logtoegang';document.querySelectorAll('.profile-avatar').forEach(img=>{img.src=identity.avatar;});const footerAvatar=$('.sidebar .profile .profile-avatar');if(identity.admin&&footerAvatar){footerAvatar.src='/brand/robin-development.webp';footerAvatar.alt='Robin Website Development';}}
   $('#botSettingsLink').hidden=!identity?.admin;if(!identity?.admin||!allowed)clearBotSettings();$('#accountsButton').hidden=!identity?.admin;$('#siteActivityLink').hidden=!identity?.admin;
-  if(!allowed){delete document.documentElement.dataset.roster;data=null;roster=null;vault=null;warehousesData=null;$('#warehouseContents').replaceChildren();siteActivityData=null;clearSiteActivity();$('#vaultContents').replaceChildren();$('#memberGroups').replaceChildren();closeDetail();render();clearTimeout(timer);}else{recordSiteVisit();route();}
- }catch{clearBotSettings();$('#authGate').hidden=false;$('#dashboard').hidden=true;$('#authMessage').textContent='De website is tijdelijk niet bereikbaar. Herlaad de pagina om opnieuw te proberen.';connection=null;data=null;clearTimeout(timer);}
+  if(!allowed){clearTools();delete document.documentElement.dataset.roster;data=null;roster=null;vault=null;warehousesData=null;$('#warehouseContents').replaceChildren();siteActivityData=null;clearSiteActivity();$('#vaultContents').replaceChildren();$('#memberGroups').replaceChildren();closeDetail();render();clearTimeout(timer);}else{recordSiteVisit();route();}
+ }catch{clearTools();clearBotSettings();$('#authGate').hidden=false;$('#dashboard').hidden=true;$('#authMessage').textContent='De website is tijdelijk niet bereikbaar. Herlaad de pagina om opnieuw te proberen.';connection=null;data=null;clearTimeout(timer);}
 }
 async function logout(){
- clearBotSettings();
+ clearTools();clearBotSettings();
  if(identity){await fetch('/api/logout',{method:'POST',headers:{'X-CSRF-Token':identity.csrf},credentials:'same-origin'});}
  location.assign('/');
 }
@@ -58,16 +68,17 @@ $('#gateLogout').onclick=logout;
 function status(message,online=false){$('#feedstate').textContent=message;$('.sample-label').textContent=online?'VERBONDEN':'NIET LIVE';document.documentElement.dataset.online=online?'yes':'no';}
 function bounds(){const p=$('#period').value;if(p==='hour')return Date.now()-3600000;if(p==='all')return 0;const now=new Date();now.setHours(0,0,0,0);return now.getTime();}
 function query(pageOverride=page){return new URLSearchParams({cat:active,action:actionFilter,q:$('#search').value.trim(),from:String(bounds()),period:$('#period').value,page:String(pageOverride)});}
-const canPage=id=>['siteactivity','botsettings'].includes(id)?!!identity?.admin:!!identity?.pages?.includes(id);
-const pageRoute=id=>id==='botsettings'?'#/botinstellingen':id==='warehousestock'?'#/loodsen':id==='siteactivity'?'#/siteactiviteit':id==='overview'?'#/overzicht':id==='roster'?'#/ledenlijst':id==='safe'?'#/kluis':id==='pots'?'#/potjes':'#/logs/'+id;
+const canPage=id=>id==='forms'?!!identity?.allowed:['siteactivity','botsettings','studio','permissions'].includes(id)?!!identity?.admin:!!identity?.pages?.includes(id);
+const pageRoute=id=>toolPages[id]?.hash|| (id==='botsettings'?'#/botinstellingen':id==='warehousestock'?'#/loodsen':id==='siteactivity'?'#/siteactiviteit':id==='overview'?'#/overzicht':id==='roster'?'#/ledenlijst':id==='safe'?'#/kluis':id==='pots'?'#/potjes':'#/logs/'+id);
 function hidePageLinks(){for(const a of document.querySelectorAll('a[href^="#/logs/"]'))a.hidden=!canPage(a.getAttribute('href').slice(7));}
 function nav(){
  const counts=Object.fromEntries((data?.counts||[]).map(c=>[c.cat,c.n]));let html='';
  if(canPage('overview'))html+=`<a class="navitem ${active==='all'?'active':''}" href="#/overzicht">${icon('grid')}<span class="navtext">Overzicht</span><span class="navcount">${data?Object.values(counts).reduce((a,b)=>a+b,0):'—'}</span></a>`;
- const special=[['roster','Live ledenlijst','users'],['safe','Kluisoverzicht','vault'],['pots','Potjesoverzicht','money'],['warehousestock','Loodsen','warehouse']].filter(([id])=>canPage(id));
+ const special=[['roster','Live ledenlijst','users'],['safe','Kluisoverzicht','vault'],['pots','Potjesoverzicht','money'],['warehousestock','Loodsen','warehouse'],['forms','Formulieren','grid']].filter(([id])=>canPage(id));
  if(special.length)html+='<div class="navgroup">Organisatie</div>';
  for(const [id,label,ic] of special)html+=`<a class="navitem ${active===id?'active':''}" href="${pageRoute(id)}">${icon(ic)}<span class="navtext">${label}</span></a>`;
  for(const group of ['Discord','La Noche']){const entries=Object.entries(cats).filter(([key,c])=>c.group===group&&canPage(key));if(!entries.length)continue;html+=`<div class="navgroup">${group}</div>`;for(const [key,c] of entries)html+=`<a class="navitem ${active===key?'active':''}" href="#/logs/${key}">${icon(c.icon)}<span class="navtext">${esc(c.label)}</span><span class="navcount">${data?counts[key]||0:'—'}</span></a>`;}
+ if(identity?.admin){html+='<div class="navgroup">Website Development</div>';for(const id of ['studio','permissions'])html+=`<a class="navitem ${active===id?'active':''}" href="${toolPages[id].hash}">${icon(toolPages[id].icon)}<span class="navtext">${esc(toolPages[id].title)}</span></a>`;}
  $('#nav').innerHTML=html;
 }
 const chartHourFormatter=new Intl.DateTimeFormat('nl-NL',{timeZone:'Europe/Amsterdam',hour:'2-digit',hourCycle:'h23'});
@@ -89,6 +100,7 @@ function banner(){
  b.innerHTML=`<b>${warnings.length?'Controleer logdekking':'Verbonden met '+esc(data.guild.name)}</b><p>${esc(warnings.join(' ')||c.history)} <span>Laatste synchronisatie: ${fmtTime(lastSuccess)}.</span></p>`;
 }
 async function refresh(){
+ if(toolPages[active]){clearTimeout(timer);request?.abort();++serial;showTool();return;}
  if(active==='botsettings'){clearTimeout(timer);request?.abort();++serial;if(!identity?.admin){clearBotSettings();return;}if(!botSettingsData&&!botSettingsBusy)loadBotSettings();return;}
  clearTimeout(timer);
  if(document.hidden||document.querySelector('dialog[open]')){if(connection&&!paused)timer=setTimeout(refresh,interval);return;}
@@ -116,24 +128,25 @@ async function refresh(){
  finally{clearTimeout(timeout);if(my===serial&&!paused&&connection)timer=setTimeout(refresh,interval);}
 }
 function route(){
- const m=location.hash.match(/^#\/logs\/(\w+)$/);active=location.hash==='#/botinstellingen'?'botsettings':location.hash==='#/loodsen'?'warehousestock':location.hash==='#/siteactiviteit'?'siteactivity':location.hash==='#/potjes'?'pots':location.hash==='#/kluis'?'safe':location.hash==='#/ledenlijst'?'roster':m&&cats[m[1]]?m[1]:'all';actionFilter='all';page=1;data=null;$('#search').value='';
+ const m=location.hash.match(/^#\/logs\/(\w+)$/);active=Object.keys(toolPages).find(key=>toolPages[key].hash===location.hash)|| (location.hash==='#/botinstellingen'?'botsettings':location.hash==='#/loodsen'?'warehousestock':location.hash==='#/siteactiviteit'?'siteactivity':location.hash==='#/potjes'?'pots':location.hash==='#/kluis'?'safe':location.hash==='#/ledenlijst'?'roster':m&&cats[m[1]]?m[1]:'all');actionFilter='all';page=1;data=null;$('#search').value='';
  const requested=active==='all'?'overview':active;
  if(!canPage(requested)){
-  const next=identity?.pages?.[0];if(next){location.hash=pageRoute(next);return;}
+  const next=identity?.pages?.[0]||(identity?.allowed?'forms':null);if(next){location.hash=pageRoute(next);return;}
   active='none';
  }
+ const toolPage=!!toolPages[active];$('#toolsPanel').hidden=!toolPage;if(mountedTool&&mountedTool!==active){window.lnTools?.[mountedTool]?.close?.();mountedTool=null;resetToolHost();}
  const botSettingsPage=active==='botsettings';$('#botSettingsPanel').hidden=!botSettingsPage;$('#botSettingsLink').classList.toggle('active',botSettingsPage);if(!identity?.admin)clearBotSettings();
  const warehousesPage=active==='warehousestock';$('#warehousePanel').hidden=!warehousesPage;if(warehousesPage&&!warehousesData)$('#warehouseStatus').textContent='Loodsen laden…';
  const activityPage=active==='siteactivity';$('#siteActivityPanel').hidden=!activityPage;$('#siteActivityLink').classList.toggle('active',activityPage);
- const noPages=active==='none';$('#noPages').hidden=!noPages;$('#pause').hidden=noPages||botSettingsPage;
+ const noPages=active==='none';$('#noPages').hidden=!noPages;$('#pause').hidden=noPages||botSettingsPage||toolPage;
  const potsPage=active==='pots';$('#potsPanel').hidden=!potsPage;
  const vaultPage=active==='safe';$('#vaultPanel').hidden=!vaultPage;
  const rosterPage=active==='roster';document.documentElement.dataset.roster=rosterPage?'inner-circle':'';applyTheme();$('#themeToggle').hidden=rosterPage;$('#memberPanel').hidden=!rosterPage;if(rosterPage&&!roster)$('#memberStatus').textContent='Leden laden…';
- for(const sel of ['#stats','.insights','.logpanel','#connectionBanner'])$(sel).hidden=rosterPage||vaultPage||potsPage||activityPage||warehousesPage||noPages||botSettingsPage;
- $('#export').hidden=rosterPage||vaultPage||potsPage||activityPage||warehousesPage||noPages||botSettingsPage;
- $('.pagehead h1').innerHTML=(botSettingsPage?'Botinstellingen':warehousesPage?'De loodsen':activityPage?'Siteactiviteit':noPages?'Jouw toegang':potsPage?'De potjes':vaultPage?'De kluis':rosterPage?'De Inner Circle':active==='all'?'Alles in beeld':esc(cats[active].label))+'<span>.</span>';
- $('.pagehead p').textContent=botSettingsPage?'Opmaak, teksten en koppelingen. Alleen toegankelijk voor jou.':warehousesPage?'Alle voorraad in Loods. Toevoegen, verwijderen en direct bijgewerkt.':activityPage?'Wie de site bezoekt en met Discord inlogt. Alleen voor jou.':noPages?'Je account heeft nog geen toegestane pagina’s.':potsPage?'Elk potje in beeld. Saldo, verdeling en totaal.':vaultPage?'Geld en voorraad. Altijd het actuele totaal.':rosterPage?'Eén familie. Iedere rang op zijn plek. Rechtstreeks uit Discord.':active==='all'?'Elke geregistreerde actie. Eén overzicht.':cats[active].desc;
- $('.breadcrumb strong').textContent=botSettingsPage?'Botinstellingen':warehousesPage?'Loodsen':activityPage?'Siteactiviteit':noPages?'Toegang':potsPage?'Potjesoverzicht':vaultPage?'Kluisoverzicht':rosterPage?'Ledenlijst':active==='all'?'Overzicht':cats[active].label;render();hidePageLinks();refresh();
+ for(const sel of ['#stats','.insights','.logpanel','#connectionBanner'])$(sel).hidden=rosterPage||vaultPage||potsPage||activityPage||warehousesPage||noPages||botSettingsPage||toolPage;
+ $('#export').hidden=rosterPage||vaultPage||potsPage||activityPage||warehousesPage||noPages||botSettingsPage||toolPage;
+ $('.pagehead h1').innerHTML=(toolPage?toolPages[active].title:botSettingsPage?'Botinstellingen':warehousesPage?'De loodsen':activityPage?'Siteactiviteit':noPages?'Jouw toegang':potsPage?'De potjes':vaultPage?'De kluis':rosterPage?'De Inner Circle':active==='all'?'Alles in beeld':esc(cats[active].label))+'<span>.</span>';
+ $('.pagehead p').textContent=toolPage?toolPages[active].description:botSettingsPage?'Opmaak, teksten en koppelingen. Alleen toegankelijk voor jou.':warehousesPage?'Alle voorraad in Loods. Toevoegen, verwijderen en direct bijgewerkt.':activityPage?'Wie de site bezoekt en met Discord inlogt. Alleen voor jou.':noPages?'Je account heeft nog geen toegestane pagina’s.':potsPage?'Elk potje in beeld. Saldo, verdeling en totaal.':vaultPage?'Geld en voorraad. Altijd het actuele totaal.':rosterPage?'Eén familie. Iedere rang op zijn plek. Rechtstreeks uit Discord.':active==='all'?'Elke geregistreerde actie. Eén overzicht.':cats[active].desc;
+ $('.breadcrumb strong').textContent=toolPage?toolPages[active].title:botSettingsPage?'Botinstellingen':warehousesPage?'Loodsen':activityPage?'Siteactiviteit':noPages?'Toegang':potsPage?'Potjesoverzicht':vaultPage?'Kluisoverzicht':rosterPage?'Ledenlijst':active==='all'?'Overzicht':cats[active].label;render();hidePageLinks();refresh();
 }
 function renderMembers(){
  const q=$('#memberSearch').value.trim().toLowerCase();let shown=0;
