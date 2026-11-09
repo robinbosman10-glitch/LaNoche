@@ -21,12 +21,13 @@ export function createLogsiteAuth(store,getClient,guildId,{env=process.env,fetch
  const assets=new Map([['/',['index.html','text/html; charset=utf-8']],['/index.html',['index.html','text/html; charset=utf-8']],['/app.js',['app.js','text/javascript; charset=utf-8']],['/style.css',['style.css','text/css; charset=utf-8']]].map(([path,[file,type]])=>[path,{type,content:readFileSync(new URL('../web/'+file,import.meta.url))}]));
  for(const name of ['inner-circle-scene','inner-circle-marble','robin-development'])assets.set('/brand/'+name+'.webp',{type:'image/webp',content:readFileSync(new URL('../assets/'+name+'.webp',import.meta.url))});
  assets.set('/brand/logo.gif',{type:'image/gif',content:readFileSync(new URL('../assets/ticket-logo.gif',import.meta.url))});
+ assets.set('/brand/banner.gif',{type:'image/gif',content:readFileSync(new URL('../assets/ticket-banner.gif',import.meta.url))});
  let authWindow=0,authCount=0;
  return async(req,res)=>{
   const url=new URL(req.url,origin),path=url.pathname;
   if(!assets.has(path)&&!['/auth/discord','/auth/discord/callback','/api/me','/api/logout','/api/access'].includes(path))return false;
   res.setHeader('Cache-Control','no-store');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');res.setHeader('X-Frame-Options','DENY');
-  res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://cdn.discordapp.com; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
+  res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://cdn.discordapp.com https://media.discordapp.net; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
   const send=(code,data)=>{res.writeHead(code,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(data));return true;};
   const redirect=location=>{res.writeHead(303,{Location:location});res.end();return true;};
   const clientId=env.DISCORD_OAUTH_CLIENT_ID||getClient()?.application?.id;

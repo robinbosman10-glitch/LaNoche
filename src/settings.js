@@ -26,3 +26,13 @@ export const settings = {
 
 // Ledenlijsten: Hitman tussen Veterano en Comandante (laag naar hoog).
 settings.memberlistRanks = settings.ranks.flatMap(id => id === '1335747208762626139' ? [id, '1568907803773378671'] : [id]);
+
+// Persistent website overrides are applied before the bot starts.
+settings.branding = {author:'LA NOCHE  •  OFFICIEEL',footer:'LA NOCHE  •  Loyaliteit. Respect. Familie.',color:'#ff7900',logoUrl:'',bannerUrl:''};
+settings.ticketPanel = {
+ title:'DE NACHT BEGINT HIER.',
+ description:'**Welkom bij La Noche.**\nLoyaliteit in de familie. Duidelijke afspraken in zaken.\nKies jouw onderwerp en spreek ons team in een privéticket.',
+ applications:'Jouw plek in de familie. Laat zien wie je bent.',
+ laundering:'Jouw aanvraag, discreet besproken. Maak afspraken met ons team.',
+ trade:'Voorraad aanbieden of op zoek naar aanbod? Bespreek de mogelijkheden met ons team. Kies hieronder **Drugs inkoop** of **Drugs verkoop**.'
+};

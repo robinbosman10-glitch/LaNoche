@@ -49,7 +49,7 @@ export async function updateMemberlist(guild, store, requestedChannel) {
           const old = message.attachments;
           const logo = old.find(a=>a.name==='logo.png');
           const banner = old.find(a=>a.name==='banner.png');
-          if(logo && banner) { delete payload.files; payload.embeds[0].setAuthor({name:'LA NOCHE • OFFICIEEL',iconURL:logo.url}).setThumbnail(logo.url).setImage(banner.url); }
+          if(logo && banner && !settings.branding?.logoUrl && !settings.branding?.bannerUrl) { delete payload.files; payload.embeds[0].setAuthor({name:settings.branding?.author||'LA NOCHE  •  OFFICIEEL',iconURL:logo.url}).setThumbnail(logo.url).setImage(banner.url); }
           else payload.attachments=[];
         }
         await message.edit(payload);

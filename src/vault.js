@@ -4,7 +4,8 @@ import {normalizeItem} from './vault-store.js';
 import {ActionRowBuilder,ButtonBuilder,ButtonStyle,ModalBuilder,TextInputBuilder,TextInputStyle,MessageFlags,PermissionFlagsBits as P,escapeMarkdown} from 'discord.js';
 import {DateTime} from 'luxon';
 import {createHash} from 'node:crypto';
-import {branded} from './embeds.js';
+import {branded,brandLogo} from './embeds.js';
+import {settings} from './settings.js';
 import {parseAmount} from './money-store.js';
 import {UserError} from './logic.js';
 export const vaultChannel='1561810060462661763';
@@ -160,7 +161,7 @@ export function vaultOverviewPayload(store,guild) {
    .sort((a,b)=>a.item.localeCompare(b.item,'nl'))));
  }
  const payload=branded(overviewTitle,`TOTAAL GELD IN KLUIS\n**${currency(money('wit')+money('zwart'))}**`,fields,'ticket-banner.gif','ticket-logo.gif');
- payload.embeds[0].setAuthor({name:'LA NOCHE • KLUISBEHEER',iconURL:'attachment://ticket-logo.gif'})
+ payload.embeds[0].setAuthor({name:'LA NOCHE • KLUISBEHEER',iconURL:brandLogo('ticket-logo.gif')})
   .setFooter({text:'Live voorraad • Automatisch bijgewerkt'});
  return payload;
 }
@@ -188,7 +189,7 @@ export function syncVault(guild,store) {
   if(message) {
    const logo=message.attachments?.find(a=>a.name==='ticket-logo.gif');
    const banner=message.attachments?.find(a=>a.name==='ticket-banner.gif');
-   if(logo && banner){delete payload.files;payload.embeds[0].setAuthor({name:'LA NOCHE • KLUISBEHEER',iconURL:logo.url}).setThumbnail(logo.url).setImage(banner.url);}
+   if(logo && banner && !settings.branding?.logoUrl && !settings.branding?.bannerUrl){delete payload.files;payload.embeds[0].setAuthor({name:'LA NOCHE • KLUISBEHEER',iconURL:logo.url}).setThumbnail(logo.url).setImage(banner.url);}
    else payload.attachments=[];
    await message.edit(payload);
   }else message=await channel.send(payload);

@@ -1,3 +1,4 @@
+import {botSettingsStore} from './bot-settings-store.js';
 import {warehouseStore} from './warehouse-store.js';
 import {ownerLogDmStore} from './owner-log-dm-store.js';
 import {siteActivityStore} from './site-activity-store.js';
@@ -40,6 +41,7 @@ export function createStore(directory) {
     ...money,
     ...siteActivityStore(db),
     ...logsiteStore(db),
+    ...botSettingsStore(db),
     ...logRetirementStore(db),
     backupOperationalDatabase(){const path=join(directory,'before-operational-channel-retirement.sqlite');if(!existsSync(path))db.prepare('VACUUM INTO ?').run(path);},
     backupLogDatabase(){const path=join(directory,'before-log-channel-retirement.sqlite');if(!existsSync(path))db.prepare('VACUUM INTO ?').run(path);},

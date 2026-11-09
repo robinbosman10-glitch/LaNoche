@@ -2,7 +2,7 @@ import {webOnlyLogs,deliverLogsToWebsite} from './log-destination.js';
 import {transcriptBase,transcriptLink} from './transcript-web.js';
 import {captureTranscript} from './transcripts.js';
 import {AttachmentBuilder,ActionRowBuilder,ButtonBuilder,ButtonStyle,escapeMarkdown} from 'discord.js';
-import {branded,field} from './embeds.js';
+import {branded,field,brandLogo} from './embeds.js';
 import {settings} from './settings.js';
 const users=id=>id?`<@${id}>\n\`${id}\``:'Automatisch systeem';
 const dates=ms=>`<t:${Math.floor(ms/1000)}:F>`;
@@ -36,7 +36,7 @@ export function auditPayload(e) {
  }
  const payload=branded(title,description,fields,'ticket-banner.gif','ticket-logo.gif');
  payload.embeds[0].setColor(color).setTimestamp(e.time).setFooter({text:e.type==='ticket'?`LA NOCHE • Dossier ${e.channel}`:'LA NOCHE • Logboek'});
- if(e.type==='ticket')payload.embeds[0].setAuthor({name:'LA NOCHE  /  TICKETARCHIEF',iconURL:'attachment://ticket-logo.gif'});
+ if(e.type==='ticket')payload.embeds[0].setAuthor({name:'LA NOCHE  /  TICKETARCHIEF',iconURL:brandLogo('ticket-logo.gif')});
  return payload;
 }
 const busy=new Set();

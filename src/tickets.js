@@ -16,10 +16,10 @@ async function locked(key, fn) {
   locks.add(key); try { return await fn(); } finally { locks.delete(key); }
 }
 export function panelPayload() {
-  const payload = branded('DE NACHT BEGINT HIER.', '**Welkom bij La Noche.**\nLoyaliteit in de familie. Duidelijke afspraken in zaken.\nKies jouw onderwerp en spreek ons team in een privéticket.', [
-    field('📝  SOLLICITATIES', 'Jouw plek in de familie. Laat zien wie je bent.', false),
-    field('💸  WITWAS', 'Jouw aanvraag, discreet besproken. Maak afspraken met ons team.', false),
-    field('📦  DRUGS INKOOP & VERKOOP', 'Voorraad aanbieden of op zoek naar aanbod? Bespreek de mogelijkheden met ons team. Kies hieronder **Drugs inkoop** of **Drugs verkoop**.', false),
+  const payload = branded(settings.ticketPanel.title, settings.ticketPanel.description, [
+    field('📝  SOLLICITATIES', settings.ticketPanel.applications, false),
+    field('💸  WITWAS', settings.ticketPanel.laundering, false),
+    field('📦  DRUGS INKOOP & VERKOOP', settings.ticketPanel.trade, false),
     field('☾  DIRECT CONTACT', 'Selecteer hieronder je onderwerp.\n**Privékanaal · Persoonlijke behandeling · Maximaal twee open tickets**', false),
   ], 'ticket-banner.gif', 'ticket-logo.gif');
   const card = payload.embeds[0];

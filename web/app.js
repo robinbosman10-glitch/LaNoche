@@ -29,6 +29,7 @@ let theme=read('ln-theme','system');interval=read('ln-interval',10000);if(![5000
 function applyTheme(){document.documentElement.dataset.theme=document.documentElement.dataset.roster==='inner-circle'?'dark':theme==='system'?(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'):theme;}
 applyTheme();matchMedia('(prefers-color-scheme: light)').addEventListener('change',applyTheme);
 $('#themeToggle').onclick=()=>{theme=document.documentElement.dataset.theme==='light'?'dark':'light';localStorage.setItem('ln-theme',JSON.stringify(theme));applyTheme();};
+let botSettingsData=null,botSettingsDirty=false,botSettingsBusy=false,botSettingsRequest=0;
 let identity=null,roster=null,vault=null,potsData=null,siteActivityData=null,siteActivityPage=1,siteVisitRecorded=false,warehousesData=null;
 try{sessionStorage.removeItem('ln-connection');}catch{}
 if(location.hash.startsWith('#connect='))history.replaceState(null,'',location.pathname);
@@ -44,11 +45,12 @@ async function loadIdentity(){
   const errors={invalid:'De inlogpoging is verlopen. Probeer opnieuw.',cancelled:'Discord-login geannuleerd.',failed:'Inloggen is niet gelukt. Probeer opnieuw.',unconfigured:'Discord-login wordt nog ingesteld door de beheerder.'};
   $('#authMessage').textContent=identity&&!allowed?`Je bent ingelogd als ${identity.name} (${identity.id}), maar dit Discord-ID heeft geen toegang. Vraag de beheerder om je ID toe te voegen.`:!me.configured?'Discord-login is nog niet geconfigureerd. De beheerder moet de OAuth-instellingen afronden.':errors[authError]||'Log in met Discord om het logdashboard te openen.';
   if(identity){$('#profileName').textContent=identity.name;$('#profileRole').textContent=identity.admin?'Website Development':'Logtoegang';document.querySelectorAll('.profile-avatar').forEach(img=>{img.src=identity.avatar;});const footerAvatar=$('.sidebar .profile .profile-avatar');if(identity.admin&&footerAvatar){footerAvatar.src='/brand/robin-development.webp';footerAvatar.alt='Robin Website Development';}}
-  $('#accountsButton').hidden=!identity?.admin;$('#siteActivityLink').hidden=!identity?.admin;
+  $('#botSettingsLink').hidden=!identity?.admin;if(!identity?.admin||!allowed)clearBotSettings();$('#accountsButton').hidden=!identity?.admin;$('#siteActivityLink').hidden=!identity?.admin;
   if(!allowed){delete document.documentElement.dataset.roster;data=null;roster=null;vault=null;warehousesData=null;$('#warehouseContents').replaceChildren();siteActivityData=null;clearSiteActivity();$('#vaultContents').replaceChildren();$('#memberGroups').replaceChildren();closeDetail();render();clearTimeout(timer);}else{recordSiteVisit();route();}
- }catch{$('#authGate').hidden=false;$('#dashboard').hidden=true;$('#authMessage').textContent='De website is tijdelijk niet bereikbaar. Herlaad de pagina om opnieuw te proberen.';connection=null;data=null;clearTimeout(timer);}
+ }catch{clearBotSettings();$('#authGate').hidden=false;$('#dashboard').hidden=true;$('#authMessage').textContent='De website is tijdelijk niet bereikbaar. Herlaad de pagina om opnieuw te proberen.';connection=null;data=null;clearTimeout(timer);}
 }
 async function logout(){
+ clearBotSettings();
  if(identity){await fetch('/api/logout',{method:'POST',headers:{'X-CSRF-Token':identity.csrf},credentials:'same-origin'});}
  location.assign('/');
 }
@@ -56,8 +58,8 @@ $('#gateLogout').onclick=logout;
 function status(message,online=false){$('#feedstate').textContent=message;$('.sample-label').textContent=online?'VERBONDEN':'NIET LIVE';document.documentElement.dataset.online=online?'yes':'no';}
 function bounds(){const p=$('#period').value;if(p==='hour')return Date.now()-3600000;if(p==='all')return 0;const now=new Date();now.setHours(0,0,0,0);return now.getTime();}
 function query(pageOverride=page){return new URLSearchParams({cat:active,action:actionFilter,q:$('#search').value.trim(),from:String(bounds()),period:$('#period').value,page:String(pageOverride)});}
-const canPage=id=>id==='siteactivity'?!!identity?.admin:!!identity?.pages?.includes(id);
-const pageRoute=id=>id==='warehousestock'?'#/loodsen':id==='siteactivity'?'#/siteactiviteit':id==='overview'?'#/overzicht':id==='roster'?'#/ledenlijst':id==='safe'?'#/kluis':id==='pots'?'#/potjes':'#/logs/'+id;
+const canPage=id=>['siteactivity','botsettings'].includes(id)?!!identity?.admin:!!identity?.pages?.includes(id);
+const pageRoute=id=>id==='botsettings'?'#/botinstellingen':id==='warehousestock'?'#/loodsen':id==='siteactivity'?'#/siteactiviteit':id==='overview'?'#/overzicht':id==='roster'?'#/ledenlijst':id==='safe'?'#/kluis':id==='pots'?'#/potjes':'#/logs/'+id;
 function hidePageLinks(){for(const a of document.querySelectorAll('a[href^="#/logs/"]'))a.hidden=!canPage(a.getAttribute('href').slice(7));}
 function nav(){
  const counts=Object.fromEntries((data?.counts||[]).map(c=>[c.cat,c.n]));let html='';
@@ -87,6 +89,7 @@ function banner(){
  b.innerHTML=`<b>${warnings.length?'Controleer logdekking':'Verbonden met '+esc(data.guild.name)}</b><p>${esc(warnings.join(' ')||c.history)} <span>Laatste synchronisatie: ${fmtTime(lastSuccess)}.</span></p>`;
 }
 async function refresh(){
+ if(active==='botsettings'){clearTimeout(timer);request?.abort();++serial;if(!identity?.admin){clearBotSettings();return;}if(!botSettingsData&&!botSettingsBusy)loadBotSettings();return;}
  clearTimeout(timer);
  if(document.hidden||document.querySelector('dialog[open]')){if(connection&&!paused)timer=setTimeout(refresh,interval);return;}
  if(connection){
@@ -113,23 +116,24 @@ async function refresh(){
  finally{clearTimeout(timeout);if(my===serial&&!paused&&connection)timer=setTimeout(refresh,interval);}
 }
 function route(){
- const m=location.hash.match(/^#\/logs\/(\w+)$/);active=location.hash==='#/loodsen'?'warehousestock':location.hash==='#/siteactiviteit'?'siteactivity':location.hash==='#/potjes'?'pots':location.hash==='#/kluis'?'safe':location.hash==='#/ledenlijst'?'roster':m&&cats[m[1]]?m[1]:'all';actionFilter='all';page=1;data=null;$('#search').value='';
+ const m=location.hash.match(/^#\/logs\/(\w+)$/);active=location.hash==='#/botinstellingen'?'botsettings':location.hash==='#/loodsen'?'warehousestock':location.hash==='#/siteactiviteit'?'siteactivity':location.hash==='#/potjes'?'pots':location.hash==='#/kluis'?'safe':location.hash==='#/ledenlijst'?'roster':m&&cats[m[1]]?m[1]:'all';actionFilter='all';page=1;data=null;$('#search').value='';
  const requested=active==='all'?'overview':active;
  if(!canPage(requested)){
   const next=identity?.pages?.[0];if(next){location.hash=pageRoute(next);return;}
   active='none';
  }
+ const botSettingsPage=active==='botsettings';$('#botSettingsPanel').hidden=!botSettingsPage;$('#botSettingsLink').classList.toggle('active',botSettingsPage);if(!identity?.admin)clearBotSettings();
  const warehousesPage=active==='warehousestock';$('#warehousePanel').hidden=!warehousesPage;if(warehousesPage&&!warehousesData)$('#warehouseStatus').textContent='Loodsen laden…';
  const activityPage=active==='siteactivity';$('#siteActivityPanel').hidden=!activityPage;$('#siteActivityLink').classList.toggle('active',activityPage);
- const noPages=active==='none';$('#noPages').hidden=!noPages;$('#pause').hidden=noPages;
+ const noPages=active==='none';$('#noPages').hidden=!noPages;$('#pause').hidden=noPages||botSettingsPage;
  const potsPage=active==='pots';$('#potsPanel').hidden=!potsPage;
  const vaultPage=active==='safe';$('#vaultPanel').hidden=!vaultPage;
  const rosterPage=active==='roster';document.documentElement.dataset.roster=rosterPage?'inner-circle':'';applyTheme();$('#themeToggle').hidden=rosterPage;$('#memberPanel').hidden=!rosterPage;if(rosterPage&&!roster)$('#memberStatus').textContent='Leden laden…';
- for(const sel of ['#stats','.insights','.logpanel','#connectionBanner'])$(sel).hidden=rosterPage||vaultPage||potsPage||activityPage||warehousesPage||noPages;
- $('#export').hidden=rosterPage||vaultPage||potsPage||activityPage||warehousesPage||noPages;
- $('.pagehead h1').innerHTML=(warehousesPage?'De loodsen':activityPage?'Siteactiviteit':noPages?'Jouw toegang':potsPage?'De potjes':vaultPage?'De kluis':rosterPage?'De Inner Circle':active==='all'?'Alles in beeld':esc(cats[active].label))+'<span>.</span>';
- $('.pagehead p').textContent=warehousesPage?'Alle voorraad in Loods. Toevoegen, verwijderen en direct bijgewerkt.':activityPage?'Wie de site bezoekt en met Discord inlogt. Alleen voor jou.':noPages?'Je account heeft nog geen toegestane pagina’s.':potsPage?'Elk potje in beeld. Saldo, verdeling en totaal.':vaultPage?'Geld en voorraad. Altijd het actuele totaal.':rosterPage?'Eén familie. Iedere rang op zijn plek. Rechtstreeks uit Discord.':active==='all'?'Elke geregistreerde actie. Eén overzicht.':cats[active].desc;
- $('.breadcrumb strong').textContent=warehousesPage?'Loodsen':activityPage?'Siteactiviteit':noPages?'Toegang':potsPage?'Potjesoverzicht':vaultPage?'Kluisoverzicht':rosterPage?'Ledenlijst':active==='all'?'Overzicht':cats[active].label;render();hidePageLinks();refresh();
+ for(const sel of ['#stats','.insights','.logpanel','#connectionBanner'])$(sel).hidden=rosterPage||vaultPage||potsPage||activityPage||warehousesPage||noPages||botSettingsPage;
+ $('#export').hidden=rosterPage||vaultPage||potsPage||activityPage||warehousesPage||noPages||botSettingsPage;
+ $('.pagehead h1').innerHTML=(botSettingsPage?'Botinstellingen':warehousesPage?'De loodsen':activityPage?'Siteactiviteit':noPages?'Jouw toegang':potsPage?'De potjes':vaultPage?'De kluis':rosterPage?'De Inner Circle':active==='all'?'Alles in beeld':esc(cats[active].label))+'<span>.</span>';
+ $('.pagehead p').textContent=botSettingsPage?'Opmaak, teksten en koppelingen. Alleen toegankelijk voor jou.':warehousesPage?'Alle voorraad in Loods. Toevoegen, verwijderen en direct bijgewerkt.':activityPage?'Wie de site bezoekt en met Discord inlogt. Alleen voor jou.':noPages?'Je account heeft nog geen toegestane pagina’s.':potsPage?'Elk potje in beeld. Saldo, verdeling en totaal.':vaultPage?'Geld en voorraad. Altijd het actuele totaal.':rosterPage?'Eén familie. Iedere rang op zijn plek. Rechtstreeks uit Discord.':active==='all'?'Elke geregistreerde actie. Eén overzicht.':cats[active].desc;
+ $('.breadcrumb strong').textContent=botSettingsPage?'Botinstellingen':warehousesPage?'Loodsen':activityPage?'Siteactiviteit':noPages?'Toegang':potsPage?'Potjesoverzicht':vaultPage?'Kluisoverzicht':rosterPage?'Ledenlijst':active==='all'?'Overzicht':cats[active].label;render();hidePageLinks();refresh();
 }
 function renderMembers(){
  const q=$('#memberSearch').value.trim().toLowerCase();let shown=0;
@@ -167,7 +171,7 @@ let searchTimer;$('#search').oninput=()=>{clearTimeout(searchTimer);searchTimer=
 $('#pause').onclick=()=>{paused=!paused;$('#pauseLabel').textContent=paused?'Gepauzeerd':'Live updates';$('#pause').querySelector('[data-icon]').innerHTML=icon(paused?'play':'pause');if(paused){clearTimeout(timer);status('Automatische updates gepauzeerd');}else refresh();};
 $('#settings').onclick=()=>{$('#theme').value=theme;$('#interval').value=String(interval);$('#preferences').showModal();};$('#closeprefs').onclick=()=>$('#preferences').close();$('#saveprefs').onclick=()=>{theme=$('#theme').value;interval=Number($('#interval').value);localStorage.setItem('ln-theme',JSON.stringify(theme));localStorage.setItem('ln-interval',JSON.stringify(interval));applyTheme();$('#preferences').close();refresh();};$('#disconnect').onclick=logout;
 $('#export').textContent='Exporteer deze pagina';$('#export').onclick=()=>{const cell=v=>'"'+String(v??'').replace(/^[=+@-]/,"'$&").replaceAll('"','""')+'"';const csv=['ID;Categorie;Actie;Uitvoerder;Lid;Kanaal;Tijd;Details',...data.logs.map(l=>[l.id,l.cat,l.action,l.actor,l.user,l.channel,new Date(l.time).toISOString(),l.detail].map(cell).join(';'))].join('\r\n');const url=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download='la-noche-logs-pagina-'+page+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);toast(`${data.logs.length} logs van deze pagina geëxporteerd`);};
-document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='k'){e.preventDefault();(active==='warehousestock'?$('#warehouseSearch'):active==='roster'?$('#memberSearch'):$('#search')).focus();}if(e.key==='Escape')closeDetail();if(e.key==='Tab'&&!$('#drawer').hidden){const items=$('#drawer').querySelectorAll('button,a');if(e.shiftKey&&document.activeElement===items[0]){e.preventDefault();items[items.length-1].focus();}else if(!e.shiftKey&&document.activeElement===items[items.length-1]){e.preventDefault();items[0].focus();}}});
+document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='k'){e.preventDefault();(active==='botsettings'?$('#botSettingsFields [data-bot-key]')||$('#botSettingsReload'):active==='warehousestock'?$('#warehouseSearch'):active==='roster'?$('#memberSearch'):$('#search')).focus();}if(e.key==='Escape')closeDetail();if(e.key==='Tab'&&!$('#drawer').hidden){const items=$('#drawer').querySelectorAll('button,a');if(e.shiftKey&&document.activeElement===items[0]){e.preventDefault();items[items.length-1].focus();}else if(!e.shiftKey&&document.activeElement===items[items.length-1]){e.preventDefault();items[0].focus();}}});
 window.addEventListener('hashchange',route);$('#date').textContent=new Date().toLocaleDateString('nl-NL');$('#year').textContent=new Date().getFullYear();loadIdentity();
 
 let accountPageOptions=[];
@@ -392,3 +396,85 @@ $('#warehouseConfirm').onclick=async()=>{
  finally{warehouseBusy=false;$('#warehouseConfirm').disabled=false;$('#warehouseBack').disabled=false;}
 };
 
+
+// Bot settings are deliberately separate from grantable account pages.
+function clearBotSettings(){
+ ++botSettingsRequest;botSettingsData=null;botSettingsDirty=false;botSettingsBusy=false;
+ $('#botSettingsFields').replaceChildren();$('#botSettingsPanel').hidden=true;$('#botSettingsLink').hidden=true;
+ for(const id of ['botPreviewAuthor','botPreviewTitle','botPreviewDescription','botPreviewFooter','botPreviewFields'])$('#'+id).textContent='';
+ for(const id of ['botPreviewAuthorLogo','botPreviewLogo','botPreviewBanner'])$('#'+id).removeAttribute('src');
+ $('#botSettingsSave').disabled=true;$('#botSettingsStatus').textContent='';
+}
+function botSettingsValues(){return Object.fromEntries([...$('#botSettingsFields').querySelectorAll('[data-bot-key]')].map(el=>[el.dataset.botKey,el.value]));}
+function botSettingsMessage(message,error=false){$('#botSettingsStatus').textContent=message;$('#botSettingsStatus').classList.toggle('is-error',error);}
+function botSettingsControls(){
+ $('#botSettingsSave').disabled=botSettingsBusy||!botSettingsData||!botSettingsDirty;
+ $('#botSettingsReload').disabled=botSettingsBusy;
+ $('#botSettingsDirty').textContent=botSettingsBusy?'Bezig…':botSettingsDirty?'Niet-opgeslagen wijzigingen':'Alles opgeslagen';
+ for(const el of $('#botSettingsFields').querySelectorAll('input,select,textarea'))el.disabled=botSettingsBusy;
+}
+function renderBotSettings(){
+ const groups=new Map();for(const field of botSettingsData.fields){if(!groups.has(field.group))groups.set(field.group,[]);groups.get(field.group).push(field);}
+ $('#botSettingsFields').innerHTML=[...groups].map(([group,fields],index)=>`<section class="panel bot-setting-group"><div class="bot-setting-grouphead"><span>${String(index+1).padStart(2,'0')}</span><h2>${esc(group)}</h2></div><div class="bot-setting-inputs">${fields.map(f=>{
+  const value=botSettingsData.values[f.key]??'',attrs=`data-bot-key="${esc(f.key)}" ${f.maxLength?`maxlength="${Number(f.maxLength)}"`:''}`;
+  let input;
+  if(['role','channel','category'].includes(f.type)){
+   const options=botSettingsData.options[f.type==='role'?'roles':f.type==='category'?'categories':'channels']||[];
+   input=`<select ${attrs}><option value="">Kies ${f.type==='role'?'een rol':f.type==='category'?'een categorie':'een kanaal'}</option>${value&&!options.some(o=>o.id===value)?`<option value="${esc(value)}" selected>Huidige koppeling · ${esc(value)}</option>`:''}${options.map(o=>`<option value="${esc(o.id)}" ${o.id===value?'selected':''}>${esc(o.name)} · ${esc(o.id)}</option>`).join('')}</select>`;
+  }else if(f.type==='textarea')input=`<textarea rows="4" ${attrs}>${esc(value)}</textarea>`;
+  else input=`<input type="${f.type==='color'?'color':f.type==='image'?'url':'text'}" ${attrs} value="${esc(value)}" ${f.type==='image'?'placeholder="Leeg = huidige standaardafbeelding"':''}>`;
+  return `<label class="bot-setting-field"><span>${esc(f.label)}</span>${input}${f.help?`<small>${esc(f.help)}</small>`:''}</label>`;
+ }).join('')}</div></section>`).join('');
+ renderBotPreview(true);botSettingsControls();
+}
+function previewBotImage(value,fallback){
+ if(!value)return fallback;
+ try{const u=new URL(value);return u.protocol==='https:'&&['cdn.discordapp.com','media.discordapp.net'].includes(u.hostname)&&!u.username&&!u.password?u.href:fallback;}catch{return fallback;}
+}
+function renderBotPreview(images=false){
+ if(!botSettingsData)return;const v=botSettingsValues();
+ $('#botPreview').style.borderLeftColor=/^#[0-9a-f]{6}$/i.test(v['branding.color'])?v['branding.color']:'#ff7900';
+ const ticket=$('#botPreviewMode').value!=='general';
+ $('#botPreviewHeading').textContent=ticket?'Ticketpaneel':'Algemene embed';
+ $('#botPreviewAuthorRow').hidden=ticket;$('#botPreviewTicketSelect').hidden=!ticket;
+ $('#botPreviewAuthor').textContent=v['branding.author']||'';
+ $('#botPreviewTitle').textContent=ticket?v['ticketPanel.title']||'':'Een bericht van La Noche';
+ $('#botPreviewDescription').textContent=ticket?v['ticketPanel.description']||'':'Dit is een voorbeeldbericht met jouw algemene botopmaak. De titel en inhoud verschillen per botactie.';
+ $('#botPreviewFooter').textContent=ticket?'LA NOCHE  •  Alle aanvragen gaan over roleplay binnen de server.':v['branding.footer']||'';
+ $('#botPreviewFields').innerHTML=ticket?[['📝 SOLLICITATIES',v['ticketPanel.applications']],['💸 WITWAS',v['ticketPanel.laundering']],['📦 DRUGS INKOOP & VERKOOP',v['ticketPanel.trade']],['☾ DIRECT CONTACT','Selecteer hieronder je onderwerp.\n**Privékanaal · Persoonlijke behandeling · Maximaal twee open tickets**']].map(([label,value])=>`<div><b>${label}</b><p>${esc(value||'')}</p></div>`).join(''):'';
+ if(images){
+  const logo=previewBotImage(v['branding.logoUrl'],'/brand/logo.gif'),banner=previewBotImage(v['branding.bannerUrl'],'/brand/banner.gif');
+  for(const id of ['botPreviewAuthorLogo','botPreviewLogo']){const img=$('#'+id);if(img.getAttribute('src')!==logo)img.src=logo;}
+  const img=$('#botPreviewBanner');if(img.getAttribute('src')!==banner)img.src=banner;
+ }
+}
+async function loadBotSettings(){
+ if(!identity?.admin||botSettingsBusy)return;
+ const sequence=++botSettingsRequest;botSettingsBusy=true;botSettingsControls();botSettingsMessage('Instellingen ophalen…');
+ try{
+  const r=await fetch('/api/bot-settings',{credentials:'same-origin',cache:'no-store',signal:AbortSignal.timeout(15000)});const result=await r.json();
+  if(sequence!==botSettingsRequest||!identity?.admin)return;
+  if(r.status===401||r.status===403){clearBotSettings();await loadIdentity();return;}
+  if(!r.ok)throw new Error(result.error||'Instellingen konden niet worden opgehaald.');
+  botSettingsData=result;botSettingsDirty=false;renderBotSettings();botSettingsMessage('Instellingen geladen. Wijzigingen worden pas actief na opslaan.');
+  status('Botinstellingen geladen',true);
+ }catch(e){if(sequence===botSettingsRequest)botSettingsMessage(e.name==='TimeoutError'?'Het ophalen duurt te lang. Probeer opnieuw.':e.message,true);}
+ finally{if(sequence===botSettingsRequest){botSettingsBusy=false;botSettingsControls();}}
+}
+$('#botSettingsForm').addEventListener('input',e=>{if(!e.target.matches('[data-bot-key]'))return;botSettingsDirty=true;botSettingsMessage('');botSettingsControls();renderBotPreview();});
+$('#botSettingsForm').addEventListener('change',()=>renderBotPreview(true));
+$('#botSettingsReload').onclick=()=>{if(botSettingsDirty&&!confirm('Niet-opgeslagen wijzigingen weggooien en de actuele instellingen laden?'))return;loadBotSettings();};
+$('#botSettingsForm').onsubmit=async e=>{
+ e.preventDefault();if(!identity?.admin||!botSettingsData||botSettingsBusy||!botSettingsDirty)return;
+ const values=botSettingsValues(),sequence=++botSettingsRequest;botSettingsBusy=true;botSettingsControls();botSettingsMessage('Instellingen opslaan…');
+ try{
+  const r=await fetch('/api/bot-settings',{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRF-Token':identity.csrf},body:JSON.stringify({revision:botSettingsData.revision,values}),signal:AbortSignal.timeout(15000)});const result=await r.json();
+  if(sequence!==botSettingsRequest||!identity?.admin)return;
+  if(r.status===401||r.status===403){clearBotSettings();await loadIdentity();return;}
+  if(r.status===409)throw new Error('Deze instellingen zijn ondertussen gewijzigd. Je invoer blijft staan. Gebruik Opnieuw laden om de actuele versie te openen.');
+  if(!r.ok)throw new Error(result.error||'Opslaan is niet gelukt. Je invoer blijft staan.');
+  botSettingsData={...botSettingsData,revision:result.revision,values:result.values||values};botSettingsDirty=false;renderBotSettings();botSettingsMessage('Opgeslagen. De bot gebruikt deze instellingen voor nieuwe berichten en acties.');
+ }catch(e){if(sequence===botSettingsRequest)botSettingsMessage(e.name==='TimeoutError'?'Nog geen bevestiging ontvangen. Laad de instellingen opnieuw om te controleren of ze zijn opgeslagen.':e.message,true);}
+ finally{if(sequence===botSettingsRequest){botSettingsBusy=false;botSettingsControls();}}
+};
+window.addEventListener('beforeunload',e=>{if(botSettingsDirty){e.preventDefault();e.returnValue='';}});
