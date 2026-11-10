@@ -24,8 +24,13 @@ export const settings = {
   ranks: ['1311587016928133160', '1311587015761985578', '1553523466035011584', '1335747208762626139', '1326190832822390888', '1461805455553728786', '1311585576717385773', '1399490155194220614'],
 };
 
-// Ledenlijsten: Hitman tussen Veterano en Comandante (laag naar hoog).
-settings.memberlistRanks = settings.ranks.flatMap(id => id === '1335747208762626139' ? [id, '1568907803773378671'] : [id]);
+// Extra rollen in de ledenlijsten (laag naar hoog).
+settings.memberlistRanks = settings.ranks.flatMap(id => {
+  if (id === '1335747208762626139') return [id, '1568907803773378671'];
+  // Tussen Proef Leiding en Rechterhand.
+  if (id === '1326190832822390888') return [id, '1569656969944371201'];
+  return [id];
+});
 
 // Persistent website overrides are applied before the bot starts.
 settings.branding = {author:'LA NOCHE  •  OFFICIEEL',footer:'LA NOCHE  •  Loyaliteit. Respect. Familie.',color:'#ff7900',logoUrl:'',bannerUrl:''};
