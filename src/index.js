@@ -3,6 +3,7 @@ import {createPermissionsMapApi} from './permissions-map-api.js';
 import {createFormsApi} from './forms-api.js';
 import {createScenarioApi} from './scenario-api.js';
 import {createScenarioRuntime} from './scenario.js';
+import {createPointsRuntime,updatePointsList,pointsChannel} from './points.js';
 import {createBotSettingsApi} from './bot-settings-api.js';
 import {loadBotSettings} from './bot-settings.js';
 import {createWarehouseApi} from './warehouse-api.js';
@@ -66,7 +67,8 @@ try {
   else console.warn('$delete staat uit: schakel Message Content Intent in de Developer Portal in en herstart de bot.');
 } catch { console.warn('Message Content Intent kon niet worden gecontroleerd; $delete is voorlopig uitgeschakeld.'); }
 const client = new Client({ intents, partials:[Partials.Message,Partials.Reaction,Partials.User], allowedMentions: { parse: [] } });
-const scenarios=createScenarioRuntime(client,config.guildId,store,{directory:dataDirectory,onError:error=>logError('Scenario verwerken mislukt',error)});
+const scenarios=createScenarioRuntime(client,config.guildId,store,{directory:dataDirectory,onSaved:()=>pointsRefresh?.schedule(),onError:error=>logError('Scenario verwerken mislukt',error)});
+const pointsRuntime=createPointsRuntime(client,config.guildId,store,{onReset:()=>pointsRefresh?.schedule(),onError:error=>logError('Punten resetten mislukt',error)});
 const ownerLogDm=createOwnerLogDm(client,config.guildId,store,{
   // Do not feed delivery errors back into the log stream being delivered.
   onError:error=>console.error('Privélogmelding versturen mislukt',error?.code??error?.name),
@@ -75,13 +77,15 @@ const ownerLogDm=createOwnerLogDm(client,config.guildId,store,{
 const serverLogs=installServerLogs(client,config.guildId,store,error=>console.error('Serverlogs plaatsen mislukt',error?.code??error?.name));
 let ready = false;
 let refreshTimer;
+let pointsTimer;
 let absenceTimer;
 let auditTimer;
 let moneyTimer;
 let historyTimer;
 let absenceRefreshing=false;
 let liveRefresh;
-function stop(code) { scenarios.stop(); ownerLogDm.stop(); serverLogs.stop(); clearInterval(historyTimer); web.close(); clearInterval(moneyTimer); clearInterval(refreshTimer); clearInterval(absenceTimer); clearInterval(auditTimer); liveRefresh?.stop(); client.destroy(); store.close(); process.exit(code); }
+let pointsRefresh;
+function stop(code) { scenarios.stop(); ownerLogDm.stop(); serverLogs.stop(); clearInterval(historyTimer); web.close(); clearInterval(moneyTimer); clearInterval(refreshTimer); clearInterval(pointsTimer); clearInterval(absenceTimer); clearInterval(auditTimer); liveRefresh?.stop(); pointsRefresh?.stop(); client.destroy(); store.close(); process.exit(code); }
 function logError(label, error) {
   // Do not log request bodies, headers, tokens or interaction payloads.
   serverLogs.error(label,error);
@@ -147,6 +151,14 @@ client.once(Events.ClientReady, async current => {
     liveRefresh.schedule();
     refreshTimer = setInterval(() => liveRefresh.schedule(), 5 * 60 * 1000);
     refreshTimer.unref();
+    let pointsListReady=false;
+    pointsRefresh=createLiveRefresh(async()=>{
+      const result=await updatePointsList(guild,store);
+      if(result&&!pointsListReady){pointsListReady=true;console.log(`Puntenlijst actief in kanaal ${pointsChannel}: ${result.pages} pagina’s.`);}
+    },error=>logError('Puntenlijst bijwerken mislukt',error));
+    pointsRefresh.schedule();
+    pointsTimer=setInterval(()=>pointsRefresh.schedule(),60000);
+    pointsTimer.unref();
     current.user.setPresence({ status: 'online', activities: [{ name: 'La Noche', type: ActivityType.Watching }] });
     console.log(`La Noche online als ${current.user.tag}. ${commands.length} commands geregistreerd.`);
   } catch (error) { logError('Commands registreren mislukt; controleer GUILD_ID en de botuitnodiging', error); stop(1); }
@@ -165,6 +177,7 @@ client.on(Events.InteractionCreate, async interaction => {
       return;
     }
     if(scenario)await scenarios.handle(interaction);
+    else if(interaction.isChatInputCommand() && interaction.commandName==='puntenreset')await pointsRuntime.handle(interaction);
     else if(interaction.isChatInputCommand() && interaction.commandName==='logsite')await handleLogsite(interaction,store,config.guildId);
     else if(interaction.isChatInputCommand() && interaction.commandName==='blacklist')await handleBlacklist(interaction,config.guildId,store);
     else if(vault)await handleVault(interaction,config.guildId,store);
@@ -188,6 +201,7 @@ client.on(Events.ShardReady, shardId => {
     if (guild.shardId === shardId) invalidateMembers(guild);
   }
   liveRefresh?.schedule();
+  pointsRefresh?.schedule();
 });
 const blacklistTimers=new Map();
 function scheduleBlacklist(guild) {
@@ -197,14 +211,14 @@ function scheduleBlacklist(guild) {
 }
 client.on(Events.ChannelCreate,channel=>{if(channel.guild)scheduleBlacklist(channel.guild);});
 client.on(Events.ChannelUpdate,(_,channel)=>{if(channel.guild)scheduleBlacklist(channel.guild);});
-client.on(Events.GuildRoleUpdate,(_,role)=>scheduleBlacklist(role.guild));
+client.on(Events.GuildRoleUpdate,(_,role)=>{scheduleBlacklist(role.guild);if(role.guild.id===config.guildId){liveRefresh?.schedule();pointsRefresh?.schedule();}});
 function relevantMember(member) { return member.guild.id === config.guildId && settings.memberlistRanks.some(id=>member.roles.cache.has(id)); }
 client.on(Events.GuildMemberUpdate, (before, after) => {
   scheduleBlacklist(after.guild);
-  if (relevantMember(before) || relevantMember(after)) liveRefresh?.schedule();
+  if (relevantMember(before) || relevantMember(after)) {liveRefresh?.schedule();pointsRefresh?.schedule();}
 });
-client.on(Events.GuildMemberAdd, member => { scheduleBlacklist(member.guild); if (member.guild.id===config.guildId) liveRefresh?.schedule(); });
-client.on(Events.GuildMemberRemove, member => { if (member.guild.id===config.guildId) liveRefresh?.schedule(); });
+client.on(Events.GuildMemberAdd, member => { scheduleBlacklist(member.guild); if (member.guild.id===config.guildId) {liveRefresh?.schedule();pointsRefresh?.schedule();} });
+client.on(Events.GuildMemberRemove, member => { if (member.guild.id===config.guildId) {liveRefresh?.schedule();pointsRefresh?.schedule();} });
 client.on(Events.MessageCreate, async message => {
   if (message.guildId !== config.guildId || message.author.bot || message.webhookId) return;
   if (ready && intents.includes(GatewayIntentBits.MessageContent)) {

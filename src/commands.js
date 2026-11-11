@@ -3,6 +3,7 @@ import { SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
 // Names and descriptions follow the supplied screenshots. Wiring comes later.
 export const definitions = [
   ['logsite', 'Open het beveiligde live logdashboard', false, 'logdashboard'],
+  ['puntenreset', 'Zet alle gangpunten en persoonlijke punten op nul', false, 'puntenreset voor Website Development en de hoogste leidingrol'],
   ['scenario', 'Registreer een scenario, gangpunten, aanwezigen en een clip', false, 'scenarioformulier en gangpunten'],
   ['blacklist', 'Blokkeer een lid voor de serverkanalen of herstel toegang', true, 'blacklist'],
   ['kluis', 'Beheer geld, wapens en voorraad in de kluis', false, 'losstaande kluisregistratie'],
@@ -27,7 +28,7 @@ export const commands = definitions.map(command => {
     .setName(command.name)
     .setDescription(command.description);
   if (command.adminOnly) builder.setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
-  if (command.name === 'scenario') builder.setDMPermission(false);
+  if (['scenario','puntenreset'].includes(command.name)) builder.setDMPermission(false);
   if (['aangenomen', 'ontslaan', 'promotie', 'demote'].includes(command.name)) {
     builder.addUserOption(option => option.setName('persoon').setDescription('Het ganglid').setRequired(true));
     builder.addStringOption(option => option.setName('reden').setDescription('Toelichting bij deze wijziging').setMaxLength(700));

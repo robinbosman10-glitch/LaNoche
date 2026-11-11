@@ -35,12 +35,12 @@ function fixture(){
  return {directory,file,db,store,tokens,dispatch,add,close(){db.close();rmSync(directory,{recursive:true,force:true});}};
 }
 
-test('gang points are counted once per scenario, participants are deduplicated attendance only, and search does not change gang total',()=>{
+test('gang points are counted once per scenario, participants are deduplicated, and search does not change gang total',()=>{
  const f=fixture();try{
   const one=f.add();assert.equal(one.total,20);assert.equal(one.participants.length,2);assert.equal(one.participants[0].id,U);
   const two=f.add({...input(),kind:'Winkeloverval',points:5,times:3,participants:[]});assert.equal(two.participants.length,1);
-  const result=f.store.listScenarios(G,{q:'Jaro',page:1,limit:1});assert.equal(result.total,1);assert.equal(result.items[0].id,one.id);assert.deepEqual(result.summary,{points:35,scenarios:2,clips:2});
-  assert.deepEqual(f.store.listScenarios(OTHER_G).summary,{points:0,scenarios:0,clips:0});
+  const result=f.store.listScenarios(G,{q:'Jaro',page:1,limit:1});assert.equal(result.total,1);assert.equal(result.items[0].id,one.id);assert.deepEqual(result.summary,{points:35,scenarios:2,clips:2,epoch:0,resetAt:null});
+  assert.deepEqual(f.store.listScenarios(OTHER_G).summary,{points:0,scenarios:0,clips:0,epoch:0,resetAt:null});
   for(const invalid of [{points:'1e2'},{points:0},{times:-1},{points:1_000_000,times:10_000},{times:'1.5'},{participants:[{id:'x',name:'X'}]}])assert.throws(()=>normalizeScenarioInput(U,{...input(),...invalid}),ScenarioError);
  }finally{f.close();}
 });

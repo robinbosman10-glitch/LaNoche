@@ -44,8 +44,16 @@ export function scenarioStore(db){
  CREATE INDEX IF NOT EXISTS scenario_draft_author ON scenario_drafts(guild,author,expires);
  CREATE TABLE IF NOT EXISTS scenarios(guild TEXT NOT NULL,id TEXT NOT NULL,author TEXT NOT NULL,name TEXT NOT NULL,kind TEXT NOT NULL,points INTEGER NOT NULL,times INTEGER NOT NULL,total INTEGER NOT NULL,time INTEGER NOT NULL,participants TEXT NOT NULL,clip TEXT NOT NULL,search_text TEXT NOT NULL,publish_status TEXT NOT NULL DEFAULT 'pending',publish_message TEXT,publish_channel TEXT NOT NULL,publish_attempted INTEGER,publish_attempts INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(guild,id));
  CREATE INDEX IF NOT EXISTS scenarios_time ON scenarios(guild,time DESC,id DESC);
- CREATE INDEX IF NOT EXISTS scenarios_outbox ON scenarios(guild,publish_status,time);`);
- const decode=row=>row?{id:row.id,guild:row.guild,author:row.author,name:row.name,kind:row.kind,points:row.points,times:row.times,total:row.total,time:row.time,participants:JSON.parse(row.participants),clip:JSON.parse(row.clip),publish:{status:row.publish_status,message:row.publish_message,channel:row.publish_channel,attemptedAt:row.publish_attempted,attempts:row.publish_attempts}}:null;
+ CREATE INDEX IF NOT EXISTS scenarios_outbox ON scenarios(guild,publish_status,time);
+ CREATE TABLE IF NOT EXISTS scenario_points_periods(guild TEXT PRIMARY KEY,epoch INTEGER NOT NULL DEFAULT 0,reset_at INTEGER);
+ CREATE TABLE IF NOT EXISTS scenario_points_resets(guild TEXT NOT NULL,id TEXT NOT NULL,actor TEXT NOT NULL,epoch INTEGER NOT NULL,time INTEGER NOT NULL,previous_points INTEGER NOT NULL,PRIMARY KEY(guild,id));
+ CREATE TABLE IF NOT EXISTS scenario_points_lists(guild TEXT PRIMARY KEY,channel TEXT NOT NULL,messages TEXT NOT NULL);`);
+ // Existing scenarios remain in period zero. Adding the column never changes their points or clips.
+ if(!db.prepare('PRAGMA table_info(scenarios)').all().some(column=>column.name==='points_epoch'))db.exec('ALTER TABLE scenarios ADD COLUMN points_epoch INTEGER NOT NULL DEFAULT 0');
+ db.exec('CREATE INDEX IF NOT EXISTS scenarios_points_period ON scenarios(guild,points_epoch)');
+ const period=guild=>{const row=db.prepare('SELECT epoch,reset_at FROM scenario_points_periods WHERE guild=?').get(guild);return {epoch:row?.epoch??0,resetAt:row?.reset_at??null};};
+ const points=(guild,epoch=period(guild).epoch)=>db.prepare('SELECT COALESCE(SUM(total),0) points FROM scenarios WHERE guild=? AND points_epoch=?').get(guild,epoch).points;
+ const decode=(row,currentEpoch)=>row?{pointsEpoch:row.points_epoch,pointsActive:row.points_epoch===(currentEpoch??period(row.guild).epoch),id:row.id,guild:row.guild,author:row.author,name:row.name,kind:row.kind,points:row.points,times:row.times,total:row.total,time:row.time,participants:JSON.parse(row.participants),clip:JSON.parse(row.clip),publish:{status:row.publish_status,message:row.publish_message,channel:row.publish_channel,attemptedAt:row.publish_attempted,attempts:row.publish_attempts}}:null;
  const get=(guild,id)=>scenarioIdPattern.test(id||'')?decode(db.prepare('SELECT * FROM scenarios WHERE guild=? AND id=?').get(guild,id)):null;
  const draft=(guild,id,author,{now=Date.now()}={})=>{
   if(!scenarioIdPattern.test(id||''))return null;
@@ -54,6 +62,39 @@ export function scenarioStore(db){
  };
  return {
   scenario:get,scenarioDraft:draft,
+  scenarioPoints(guild){
+   const current=period(guild);
+   // UNION removes repeated IDs per scenario, including an author selected in Met wie.
+   const members=db.prepare(`WITH active AS (SELECT id,author,total,participants FROM scenarios WHERE guild=? AND points_epoch=?),
+    attendance AS (SELECT id scenario,author member,total FROM active UNION SELECT active.id,json_extract(person.value,'$.id'),active.total FROM active,json_each(active.participants) person)
+    SELECT member id,SUM(total) points,COUNT(*) scenarios FROM attendance GROUP BY member ORDER BY points DESC,member`).all(guild,current.epoch).map(row=>({...row}));
+   return {...current,points:points(guild,current.epoch),members};
+  },
+  resetScenarioPoints(guild,actor,interactionId,{now=Date.now()}={}){
+   if(!snowflake(guild)||!snowflake(actor)||!snowflake(interactionId))fail('Ongeldig puntenresetverzoek.');validTime(now);
+   db.exec('BEGIN IMMEDIATE');
+   try{
+    const previous=db.prepare('SELECT * FROM scenario_points_resets WHERE guild=? AND id=?').get(guild,interactionId);
+    if(previous){
+     if(previous.actor!==actor)fail('Dit puntenresetverzoek hoort bij iemand anders.',403);
+     db.exec('COMMIT');return {epoch:previous.epoch,resetAt:previous.time,previousPoints:previous.previous_points,duplicate:true};
+    }
+    const current=period(guild),epoch=current.epoch+1,previousPoints=points(guild,current.epoch);
+    if(!Number.isSafeInteger(epoch))fail('De puntenperiode kan niet verder worden verhoogd.');
+    db.prepare('INSERT INTO scenario_points_periods(guild,epoch,reset_at) VALUES(?,?,?) ON CONFLICT(guild) DO UPDATE SET epoch=excluded.epoch,reset_at=excluded.reset_at').run(guild,epoch,now);
+    db.prepare('INSERT INTO scenario_points_resets VALUES(?,?,?,?,?,?)').run(guild,interactionId,actor,epoch,now,previousPoints);
+    if(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='web_logs'").get()){
+     const event={id:'scenario-points-reset:'+guild+':'+interactionId,cat:'system',action:'Gangpunten gereset',time:now,person:actor,actor,channel:'Scenario’s',detail:`Gangpunten vóór reset: ${previousPoints}\nGangpunten en persoonlijke punten: 0\nNieuwe puntenperiode: ${epoch}\nScenario’s en clips blijven bewaard.`,source:'Discord /puntenreset'};
+     db.prepare('INSERT INTO web_logs VALUES(?,?,?,?,?,?,?,?,?)').run(event.id,guild,event.cat,event.action,now,event.person,event.channel,event.detail,JSON.stringify(event));
+    }
+    db.exec('COMMIT');return {epoch,resetAt:now,previousPoints,duplicate:false};
+   }catch(error){db.exec('ROLLBACK');throw error;}
+  },
+  pointsList(guild){const row=db.prepare('SELECT channel,messages FROM scenario_points_lists WHERE guild=?').get(guild);return row?{channel:row.channel,messages:JSON.parse(row.messages)}:null;},
+  savePointsList(guild,channel,messages){
+   if(!snowflake(guild)||!snowflake(channel)||!Array.isArray(messages)||messages.some(id=>!snowflake(id)))fail('Ongeldige puntenlijst.');
+   db.prepare('INSERT INTO scenario_points_lists VALUES(?,?,?) ON CONFLICT(guild) DO UPDATE SET channel=excluded.channel,messages=excluded.messages').run(guild,channel,JSON.stringify([...new Set(messages)]));
+  },
   createScenarioDraft(guild,author,input,{id=randomUUID(),now=Date.now()}={}){
    if(!snowflake(guild)||!scenarioIdPattern.test(id))fail('Ongeldig scenario.');validTime(now);
    const normalized=normalizeScenarioInput(author,input),payload=JSON.stringify(normalized);
@@ -74,10 +115,10 @@ export function scenarioStore(db){
     if(old){if(old.author!==author)fail('Dit scenario hoort bij iemand anders.',403);if(JSON.stringify(old.clip)!==JSON.stringify(normalizedClip))fail('Dit scenario is al met een andere clip geregistreerd.',409);db.exec('COMMIT');return {...old,duplicate:true};}
     const pending=draft(guild,id,author,{now});if(!pending)fail('Dit scenario is verlopen of hoort bij iemand anders. Gebruik /scenario opnieuw.',404);
     const total=pending.points*pending.times;
-    const current=db.prepare('SELECT COALESCE(SUM(total),0) n FROM scenarios WHERE guild=?').get(guild).n;
+    const epoch=period(guild).epoch,current=points(guild,epoch);
     if(!Number.isSafeInteger(current+total)||current+total>1_000_000_000_000)fail('Het maximale gangtotaal is bereikt. Neem contact op met Website Development.');
     const search=[id,pending.name,pending.kind,...pending.participants.flatMap(p=>[p.id,p.name])].join(' ').toLocaleLowerCase('nl-NL');
-    db.prepare('INSERT INTO scenarios(guild,id,author,name,kind,points,times,total,time,participants,clip,search_text,publish_channel) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)').run(guild,id,author,pending.name,pending.kind,pending.points,pending.times,total,now,JSON.stringify(pending.participants),JSON.stringify(normalizedClip),search,SCENARIO_CHANNEL);
+    db.prepare('INSERT INTO scenarios(guild,id,author,name,kind,points,times,total,time,participants,clip,search_text,publish_channel,points_epoch) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(guild,id,author,pending.name,pending.kind,pending.points,pending.times,total,now,JSON.stringify(pending.participants),JSON.stringify(normalizedClip),search,SCENARIO_CHANNEL,epoch);
     db.prepare('DELETE FROM scenario_drafts WHERE guild=? AND id=? AND author=?').run(guild,id,author);
     if(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='web_logs'").get()){
      const event={id:'scenario:'+guild+':'+id,cat:'system',action:'Scenario geregistreerd',time:now,person:pending.name,actor:author,channel:'Scenario’s',detail:`Soort: ${pending.kind}\nGangpunten: ${pending.points} × ${pending.times} = ${total}\nAanwezig: ${pending.participants.length}\nScenario-ID: ${id}`,source:'Discord /scenario'};
@@ -90,12 +131,13 @@ export function scenarioStore(db){
    q=String(q).trim().slice(0,200).toLocaleLowerCase('nl-NL');limit=Math.max(1,Math.min(50,Number.isSafeInteger(limit)?limit:20));page=Math.max(1,Number.isSafeInteger(page)?page:1);
    const args=[guild],filter=q?' AND instr(search_text,?)>0':'';if(q)args.push(q);
    const total=db.prepare('SELECT COUNT(*) n FROM scenarios WHERE guild=?'+filter).get(...args).n,pages=Math.max(1,Math.ceil(total/limit));page=Math.min(page,pages);
-   const items=db.prepare('SELECT * FROM scenarios WHERE guild=?'+filter+' ORDER BY time DESC,id DESC LIMIT ? OFFSET ?').all(...args,limit,(page-1)*limit).map(decode);
-   const summary=db.prepare('SELECT COALESCE(SUM(total),0) points,COUNT(*) scenarios,COUNT(*) clips,COALESCE(MAX(time),0) updatedAt FROM scenarios WHERE guild=?').get(guild);
-   return {items,total,page,pageSize:limit,pages,summary:{points:summary.points,scenarios:summary.scenarios,clips:summary.clips},updatedAt:summary.updatedAt};
+   const current=period(guild);
+   const items=db.prepare('SELECT * FROM scenarios WHERE guild=?'+filter+' ORDER BY time DESC,id DESC LIMIT ? OFFSET ?').all(...args,limit,(page-1)*limit).map(row=>decode(row,current.epoch));
+   const summary=db.prepare('SELECT COUNT(*) scenarios,COUNT(*) clips,COALESCE(MAX(time),0) updatedAt FROM scenarios WHERE guild=?').get(guild);
+   return {items,total,page,pageSize:limit,pages,summary:{points:points(guild,current.epoch),scenarios:summary.scenarios,clips:summary.clips,...current},updatedAt:Math.max(summary.updatedAt,current.resetAt??0)};
   },
-  pendingScenarioPublishes(guild,{limit=10}={}){return db.prepare("SELECT * FROM scenarios WHERE guild=? AND publish_status='pending' ORDER BY time,id LIMIT ?").all(guild,Math.max(1,Math.min(50,limit))).map(decode);},
-  uncertainScenarioPublishes(guild,{limit=10}={}){return db.prepare("SELECT * FROM scenarios WHERE guild=? AND publish_status='uncertain' ORDER BY publish_attempted DESC,time DESC,id DESC LIMIT ?").all(guild,Math.max(1,Math.min(50,limit))).map(decode);},
+  pendingScenarioPublishes(guild,{limit=10}={}){return db.prepare("SELECT * FROM scenarios WHERE guild=? AND publish_status='pending' ORDER BY time,id LIMIT ?").all(guild,Math.max(1,Math.min(50,limit))).map(row=>decode(row));},
+  uncertainScenarioPublishes(guild,{limit=10}={}){return db.prepare("SELECT * FROM scenarios WHERE guild=? AND publish_status='uncertain' ORDER BY publish_attempted DESC,time DESC,id DESC LIMIT ?").all(guild,Math.max(1,Math.min(50,limit))).map(row=>decode(row));},
   claimScenarioPublish(guild,id,now=Date.now()){
    validTime(now);const result=db.prepare("UPDATE scenarios SET publish_status='sending',publish_attempted=?,publish_attempts=publish_attempts+1 WHERE guild=? AND id=? AND publish_status='pending'").run(now,guild,id);
    return result.changes?get(guild,id):null;

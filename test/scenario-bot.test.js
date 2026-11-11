@@ -47,13 +47,26 @@ test('branded payload awards one gang amount with max participants, no pings and
  assert.ok(payload.components[0].toJSON().components[1].url.endsWith('/#/scenarios'));
 });
 test('complete link workflow saves attendance once and gang points once, retry never reposts',async t=>{
- const s=setup(t);const command=s.interaction('command');await s.runtime.handle(command);assert.equal(command.modal.components.length,5);
+ const updates=[];const s=setup(t,{onSaved:entry=>updates.push(entry.id)});const command=s.interaction('command');await s.runtime.handle(command);assert.equal(command.modal.components.length,5);
  const data=s.interaction('modal','data');await s.runtime.handle(data);assert.equal(s.store.listScenarios(guildId).summary.points,0);assert.match(data.replies.at(-1).content,/20 punten voor de hele gang/);
  assert.equal(s.store.scenarioDraft(guildId,draftId,author).participants.length,2);
  const button=s.interaction('button','clip');await s.runtime.handle(button);assert.equal(button.modal.components[0].component.type,19);
  const submit=s.interaction('modal','submit');await s.runtime.handle(submit);
  assert.equal(s.store.listScenarios(guildId).summary.points,20);assert.equal(s.sends.length,1);assert.equal(s.store.scenario(guildId,draftId).publish.status,'sent');
  const again=s.interaction('modal','submit');await s.runtime.handle(again);assert.equal(s.sends.length,1);assert.equal(s.store.listScenarios(guildId).summary.points,20);
+ assert.deepEqual(updates,[draftId]);
+});
+test('old submission after a reset stays archived without crediting points or refreshing twice',async t=>{
+ const updates=[];const s=setup(t,{onSaved:entry=>updates.push(entry.id)});s.draft();await s.runtime.handle(s.interaction('modal','submit'));
+ s.store.resetScenarioPoints(guildId,author,'1570202824699158739');
+ const retry=s.interaction('modal','submit');await s.runtime.handle(retry);
+ assert.equal(s.store.listScenarios(guildId).summary.points,0);assert.equal(s.sends.length,1);assert.deepEqual(updates,[draftId]);
+ assert.match(retry.replies.at(-1).content,/vóór de laatste puntenreset/);
+});
+test('list refresh failure never loses a saved scenario or adds its points twice',async t=>{
+ const s=setup(t,{onSaved:()=>{throw new Error('refresh failed');}});s.draft();await s.runtime.handle(s.interaction('modal','submit'));
+ assert.equal(s.store.listScenarios(guildId).summary.points,20);assert.equal(s.sends.length,1);assert.equal(s.errors.length,1);
+ await s.runtime.handle(s.interaction('modal','submit'));assert.equal(s.store.listScenarios(guildId).summary.points,20);assert.equal(s.sends.length,1);
 });
 test('wrong guild, nongang, blacklist and stolen drafts cannot create points',async t=>{
  const s=setup(t);const wrong=s.interaction('command');wrong.guildId='1311580149094809651';await s.runtime.handle(wrong);assert.equal(wrong.modal,null);
@@ -93,4 +106,10 @@ test('definite rejection remains pending with backoff and is sent after permissi
  const s=setup(t);s.saved();s.setError(Object.assign(new Error('missing permissions'),{status:403}));await s.runtime.flush();
  assert.equal(s.store.scenario(guildId,draftId).publish.status,'pending');await s.runtime.flush();assert.equal(s.sends.length,1);
  s.setError(null);s.advance(15000);await s.runtime.flush();assert.equal(s.sends.length,2);assert.equal(s.store.scenario(guildId,draftId).publish.status,'sent');assert.equal(s.store.listScenarios(guildId).summary.points,20);
+});
+test('a reset during a queued Discord post labels the record as a previous period',async t=>{
+ const s=setup(t);s.saved();s.guild.channels.fetch=async()=>{s.store.resetScenarioPoints(guildId,author,'1570202824699158740');return s.channel;};
+ await s.runtime.flush();
+ assert.equal(s.sends[0].embeds[0].toJSON().fields.at(-1).name,'VORIGE PERIODE');
+ assert.equal(s.store.listScenarios(guildId).summary.points,0);
 });

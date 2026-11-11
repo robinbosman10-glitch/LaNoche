@@ -8,7 +8,7 @@ import {scenarioClipPath} from './scenario-clips.js';
 export function publicScenario(scenario){
  if(!scenario)return null;
  const clip=scenario.clip.type==='file'?{type:'file',filename:scenario.clip.filename,mime:scenario.clip.mime,size:scenario.clip.size,url:`/api/scenarios/${scenario.id}/clip`}:{type:'link',url:scenario.clip.url};
- return {id:scenario.id,guild:scenario.guild,author:scenario.author,name:scenario.name,participants:scenario.participants,kind:scenario.kind,points:scenario.points,times:scenario.times,total:scenario.total,time:scenario.time,clip,publish:scenario.publish};
+ return {id:scenario.id,guild:scenario.guild,author:scenario.author,name:scenario.name,participants:scenario.participants,kind:scenario.kind,points:scenario.points,times:scenario.times,total:scenario.total,pointsEpoch:scenario.pointsEpoch,pointsActive:scenario.pointsActive,time:scenario.time,clip,publish:scenario.publish};
 }
 
 export function scenarioByteRange(header,size){

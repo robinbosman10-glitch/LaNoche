@@ -53,12 +53,13 @@ export function scenarioInput(fields){
 export function scenarioPayload(entry){
  const total=entry.points*entry.times;
  const companions=entry.participants.filter(p=>p.id!==entry.author);
- const payload=branded('SCENARIO GEREGISTREERD','De punten zijn toegevoegd aan het gangtotaal.',[
+ const archived=entry.pointsActive===false;
+ const payload=branded('SCENARIO GEREGISTREERD',archived?'Archief · dit scenario hoort bij een eerdere puntenperiode.':'De punten tellen één keer voor de gang en persoonlijk voor iedere aanwezige.',[
   {name:'𝙉𝙖𝙖𝙢',value:`<@${entry.author}> · ${escapeMarkdown(entry.name)}`,inline:true},
   {name:'𝙈𝙚𝙩 𝙬𝙞𝙚',value:companions.length?companions.map(p=>`<@${p.id}>`).join(' '):'Solo',inline:true},
   {name:'𝙒𝙖𝙩 𝙫𝙤𝙤𝙧 𝙤𝙫𝙚𝙧𝙫𝙖𝙡',value:escapeMarkdown(entry.kind),inline:true},
   {name:'𝙋𝙪𝙣𝙩𝙚𝙣 × 𝙖𝙖𝙣𝙩𝙖𝙡 𝙠𝙚𝙚𝙧',value:`${format(entry.points)} × ${format(entry.times)}`,inline:true},
-  {name:'VOOR DE HELE GANG',value:`**+${format(total)} punten**\n${entry.participants.length} aanwezige${entry.participants.length===1?'':'n'} · één keer bijgeschreven`,inline:false}
+  {name:archived?'VORIGE PERIODE':'VOOR DE HELE GANG',value:archived?`**${format(total)} punten**\nNiet meegeteld na de laatste puntenreset.`:`**+${format(total)} punten**\n${entry.participants.length} aanwezige${entry.participants.length===1?'':'n'} · één keer bijgeschreven`,inline:false}
  ],'ticket-banner.gif','ticket-logo.gif');
  payload.embeds[0].setFooter({text:`LA NOCHE • Scenario ${entry.id}`}).setTimestamp(entry.time);
  payload.components=[new ActionRowBuilder().addComponents(
@@ -88,12 +89,13 @@ async function participants(guild,ids){
 }
 export function isScenarioInteraction(i){return (i.isChatInputCommand()&&i.commandName==='scenario')||((i.isButton()||i.isModalSubmit())&&i.customId?.startsWith('ln-scenario:'));}
 
-export function createScenarioRuntime(client,guildId,store,{directory=process.env.DATA_DIR||'./data',archive=archiveScenarioClip,removeClip=removeScenarioClip,onError=()=>{},pollMs=15000,now=Date.now}={}){
+export function createScenarioRuntime(client,guildId,store,{directory=process.env.DATA_DIR||'./data',archive=archiveScenarioClip,removeClip=removeScenarioClip,onSaved=()=>{},onError=()=>{},pollMs=15000,now=Date.now}={}){
  let timer,flushRun=null,started=false,lastReconcile=-Infinity;
  const inProgress=new Set();
  const respond=(i,content,components=[])=>i.deferred||i.replied?i.editReply({content,components,embeds:[],allowedMentions:{parse:[]}}):i.reply({content,components,flags:MessageFlags.Ephemeral,allowedMentions:{parse:[]}});
  const findGuild=()=>client.guilds.cache.get(guildId);
  function savedReply(i,entry){
+  if(entry.pointsActive===false)return respond(i,'Dit scenario staat al in het archief van vóór de laatste puntenreset. De clip blijft beschikbaar; deze punten worden niet opnieuw toegevoegd.',[new ActionRowBuilder().addComponents(new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Scenario bekijken').setURL(siteLink(entry.id)))]);
   const state=entry.publish?.status;
   const suffix=state==='sent'?`Het scenario staat in <#${scenarioChannel}>.`:state==='uncertain'?'Het scenario is opgeslagen. De Discord-verzending wordt gecontroleerd; de punten tellen al één keer mee.':'Het scenario is opgeslagen. Het Discord-bericht staat klaar om te worden geplaatst.';
   return respond(i,`**+${format(entry.points*entry.times)} punten voor de gang.**\n${suffix}`,[new ActionRowBuilder().addComponents(new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Scenario bekijken').setURL(siteLink(entry.id)))]);
@@ -135,6 +137,7 @@ export function createScenarioRuntime(client,guildId,store,{directory=process.en
    await gangMember(i.guild,i.user.id);
    const entry=store.finalizeScenario(guildId,id,i.user.id,{clip,now:now()});
    archiveFile=null;
+   try{await onSaved(entry);}catch(e){onError(e);}
    try{await flush();}catch(e){onError(e);}
    return await savedReply(i,store.scenario(guildId,id)||entry);
   }catch(e){
@@ -170,7 +173,8 @@ export function createScenarioRuntime(client,guildId,store,{directory=process.en
    if(reconcileDue&&channel.permissionsFor(bot)?.has(P.ReadMessageHistory))try{await reconcile(channel,uncertain);}catch(error){onError(error);}
    for(const entry of due.slice(0,5)){
     // Validate embed/files before claiming; a claimed send must never be retried blindly.
-    const payload=scenarioPayload(entry);payload.embeds.forEach(e=>e.toJSON());
+    // Channel lookups or earlier sends may have allowed a points reset in the meantime.
+    const payload=scenarioPayload(store.scenario(guildId,entry.id)||entry);payload.embeds.forEach(e=>e.toJSON());
     if(!store.claimScenarioPublish(guildId,entry.id,now()))continue;
     let message;
     try{
