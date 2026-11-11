@@ -1,6 +1,8 @@
 import {createEmbedStudioApi} from './embed-studio-api.js';
 import {createPermissionsMapApi} from './permissions-map-api.js';
 import {createFormsApi} from './forms-api.js';
+import {createScenarioApi} from './scenario-api.js';
+import {createScenarioRuntime} from './scenario.js';
 import {createBotSettingsApi} from './bot-settings-api.js';
 import {loadBotSettings} from './bot-settings.js';
 import {createWarehouseApi} from './warehouse-api.js';
@@ -40,7 +42,8 @@ let config;
 try { config = readConfig(); }
 catch (error) { console.error(error.message); process.exit(1); }
 
-const store = createStore(process.env.DATA_DIR || './data');
+const dataDirectory = process.env.DATA_DIR || './data';
+const store = createStore(dataDirectory);
 loadBotSettings(store,config.guildId);
 transcriptBase(); // Validate configured public origin before publishing links.
 const logAuth=createLogsiteAuth(store,()=>client,config.guildId);
@@ -51,7 +54,8 @@ const botSettingsApi=createBotSettingsApi(store,()=>client,config.guildId);
 const embedStudioApi=createEmbedStudioApi(store,()=>client,config.guildId);
 const permissionsMapApi=createPermissionsMapApi(store,()=>client,config.guildId);
 const formsApi=createFormsApi(store,()=>client,config.guildId);
-const web=createTranscriptServer(store,async(req,res)=>(await logAuth(req,res))||(await siteActivityApi(req,res))||(await botSettingsApi(req,res))||(await embedStudioApi(req,res))||(await permissionsMapApi(req,res))||(await formsApi(req,res))||(await warehouseApi(req,res))||(await logApi(req,res)));
+const scenarioApi=createScenarioApi(store,()=>client,config.guildId,{directory:dataDirectory});
+const web=createTranscriptServer(store,async(req,res)=>(await logAuth(req,res))||(await siteActivityApi(req,res))||(await botSettingsApi(req,res))||(await embedStudioApi(req,res))||(await permissionsMapApi(req,res))||(await formsApi(req,res))||(await scenarioApi(req,res))||(await warehouseApi(req,res))||(await logApi(req,res)));
 web.on('error',()=>{console.error('Transcriptwebsite starten mislukt. Controleer PORT.');process.exit(1);});
 web.listen(Number(process.env.PORT||3000),'0.0.0.0');
 const intents=[GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages,GatewayIntentBits.GuildVoiceStates,GatewayIntentBits.GuildModeration,GatewayIntentBits.GuildMessageReactions,GatewayIntentBits.GuildInvites,GatewayIntentBits.GuildScheduledEvents,GatewayIntentBits.AutoModerationExecution];
@@ -62,6 +66,7 @@ try {
   else console.warn('$delete staat uit: schakel Message Content Intent in de Developer Portal in en herstart de bot.');
 } catch { console.warn('Message Content Intent kon niet worden gecontroleerd; $delete is voorlopig uitgeschakeld.'); }
 const client = new Client({ intents, partials:[Partials.Message,Partials.Reaction,Partials.User], allowedMentions: { parse: [] } });
+const scenarios=createScenarioRuntime(client,config.guildId,store,{directory:dataDirectory,onError:error=>logError('Scenario verwerken mislukt',error)});
 const ownerLogDm=createOwnerLogDm(client,config.guildId,store,{
   // Do not feed delivery errors back into the log stream being delivered.
   onError:error=>console.error('Privélogmelding versturen mislukt',error?.code??error?.name),
@@ -76,7 +81,7 @@ let moneyTimer;
 let historyTimer;
 let absenceRefreshing=false;
 let liveRefresh;
-function stop(code) { ownerLogDm.stop(); serverLogs.stop(); clearInterval(historyTimer); web.close(); clearInterval(moneyTimer); clearInterval(refreshTimer); clearInterval(absenceTimer); clearInterval(auditTimer); liveRefresh?.stop(); client.destroy(); store.close(); process.exit(code); }
+function stop(code) { scenarios.stop(); ownerLogDm.stop(); serverLogs.stop(); clearInterval(historyTimer); web.close(); clearInterval(moneyTimer); clearInterval(refreshTimer); clearInterval(absenceTimer); clearInterval(auditTimer); liveRefresh?.stop(); client.destroy(); store.close(); process.exit(code); }
 function logError(label, error) {
   // Do not log request bodies, headers, tokens or interaction payloads.
   serverLogs.error(label,error);
@@ -93,6 +98,7 @@ client.once(Events.ClientReady, async current => {
     store.beginMoneyLogReset(guild.id);
     store.initializeVault(guild.id);
     ready = true;
+    scenarios.start();
     ownerLogDm.start();
     const history=createLogHistory(guild,store);
     const retireLogs=createLogRetirement(guild,store);
@@ -146,18 +152,20 @@ client.once(Events.ClientReady, async current => {
   } catch (error) { logError('Commands registreren mislukt; controleer GUILD_ID en de botuitnodiging', error); stop(1); }
 });
 client.on(Events.InteractionCreate, async interaction => {
+  const scenario=(interaction.isChatInputCommand() && interaction.commandName==='scenario') || ((interaction.isButton() || interaction.isModalSubmit()) && interaction.customId.startsWith('ln-scenario:'));
   const vault=(interaction.isChatInputCommand() && interaction.commandName==='kluis') || (interaction.isModalSubmit() && interaction.customId.startsWith('ln-vault:'));
   const money=(interaction.isChatInputCommand() && ['geld','geldreset'].includes(interaction.commandName)) || ((interaction.isButton() || interaction.isStringSelectMenu() || interaction.isModalSubmit()) && interaction.customId.startsWith('ln-money:'));
   const transcript=interaction.isButton() && interaction.customId.startsWith('ln-transcript:');
   const absence=interaction.isButton() && interaction.customId.startsWith('ln-absence:');
   const ticket = (interaction.isButton() || interaction.isStringSelectMenu()) && interaction.customId.startsWith('ln-ticket:');
-  if (!vault && !money && !transcript && !absence && !ticket && !interaction.isChatInputCommand() && !(interaction.isModalSubmit() && ['lanoche:afwezig','lanoche:zeg'].includes(interaction.customId))) return;
+  if (!scenario && !vault && !money && !transcript && !absence && !ticket && !interaction.isChatInputCommand() && !(interaction.isModalSubmit() && ['lanoche:afwezig','lanoche:zeg'].includes(interaction.customId))) return;
   try {
     if (!ready) {
       await interaction.reply({ content: 'De bot start nog op. Probeer het zo opnieuw.', flags: MessageFlags.Ephemeral });
       return;
     }
-    if(interaction.isChatInputCommand() && interaction.commandName==='logsite')await handleLogsite(interaction,store,config.guildId);
+    if(scenario)await scenarios.handle(interaction);
+    else if(interaction.isChatInputCommand() && interaction.commandName==='logsite')await handleLogsite(interaction,store,config.guildId);
     else if(interaction.isChatInputCommand() && interaction.commandName==='blacklist')await handleBlacklist(interaction,config.guildId,store);
     else if(vault)await handleVault(interaction,config.guildId,store);
     else if(money)await handleMoney(interaction,config.guildId,store);

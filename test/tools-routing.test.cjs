@@ -21,3 +21,12 @@ test('owner tools hide logs and show correct active title without polling log AP
   const {ctx,node}=setup({id:'owner',admin:true,allowed:true,pages:[]},hash);assert.equal(ctx.active,key);assert.equal(node('#toolsPanel').hidden,false);assert.equal(node('.logpanel').hidden,true);assert.equal(node('.breadcrumb strong').textContent,title);
  }
 });
+
+test('scenario overview and deep links require the assigned scenarios page',()=>{
+ for(const hash of ['#/scenarios','#/scenarios/d734225e-6e91-40ce-9ade-8221445fb97b']){
+  const granted=setup({id:'ordinary',admin:false,allowed:true,pages:['scenarios']},hash);
+  assert.equal(granted.ctx.active,'scenarios');assert.equal(granted.node('#toolsPanel').hidden,false);assert.equal(granted.node('.logpanel').hidden,true);
+  const denied=setup({id:'ordinary',admin:false,allowed:true,pages:['overview']},hash);
+  assert.equal(denied.ctx.location.hash,'#/overzicht');assert.equal(denied.ctx.refreshed,undefined);
+ }
+});

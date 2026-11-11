@@ -1,5 +1,6 @@
 import {embedStudioStore} from './embed-studio-store.js';
 import {formsStore} from './forms-store.js';
+import {scenarioStore} from './scenario-store.js';
 import {botSettingsStore} from './bot-settings-store.js';
 import {warehouseStore} from './warehouse-store.js';
 import {ownerLogDmStore} from './owner-log-dm-store.js';
@@ -45,6 +46,7 @@ export function createStore(directory) {
     ...logsiteStore(db),
     ...embedStudioStore(db),
     ...formsStore(db),
+    ...scenarioStore(db),
     ...botSettingsStore(db),
     ...logRetirementStore(db),
     backupOperationalDatabase(){const path=join(directory,'before-operational-channel-retirement.sqlite');if(!existsSync(path))db.prepare('VACUUM INTO ?').run(path);},

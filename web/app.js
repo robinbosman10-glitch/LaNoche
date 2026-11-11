@@ -29,14 +29,14 @@ let theme=read('ln-theme','system');interval=read('ln-interval',10000);if(![5000
 function applyTheme(){document.documentElement.dataset.theme=document.documentElement.dataset.roster==='inner-circle'?'dark':theme==='system'?(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'):theme;}
 applyTheme();matchMedia('(prefers-color-scheme: light)').addEventListener('change',applyTheme);
 $('#themeToggle').onclick=()=>{theme=document.documentElement.dataset.theme==='light'?'dark':'light';localStorage.setItem('ln-theme',JSON.stringify(theme));applyTheme();};
-const toolPages={studio:{hash:'#/embedstudio',title:'Embedstudio',description:'Ontwerpen, bewaren en publiceren in Discord.',icon:'message'},permissions:{hash:'#/rechtenkaart',title:'Discord-rechtenkaart',description:'Bekijk per rol of lid wat toegankelijk is en waarom.',icon:'shield'},forms:{hash:'#/formulieren',title:'Formulieren',description:'Formulieren invullen. Website Development beheert de vragen en inzendingen.',icon:'grid'}};
+const toolPages={scenarios:{hash:'#/scenarios',title:'Gangpunten & scenario’s',description:'Eén gangtotaal. Alle scenario’s, aanwezigen en clips in één archief.',icon:'chart'},studio:{hash:'#/embedstudio',title:'Embedstudio',description:'Ontwerpen, bewaren en publiceren in Discord.',icon:'message'},permissions:{hash:'#/rechtenkaart',title:'Discord-rechtenkaart',description:'Bekijk per rol of lid wat toegankelijk is en waarom.',icon:'shield'},forms:{hash:'#/formulieren',title:'Formulieren',description:'Formulieren invullen. Website Development beheert de vragen en inzendingen.',icon:'grid'}};
 let mountedTool=null;
 function resetToolHost(){const host=$('#toolsPanel');for(const key of ['onclick','oninput','onchange','onsubmit','onkeydown'])host[key]=null;host.replaceChildren();}
 function clearTools(){for(const module of Object.values(window.lnTools||{}))module.clear?.();mountedTool=null;resetToolHost();$('#toolsPanel').hidden=true;}
 function showTool(){
  if(!toolPages[active]||!canPage(active))return;
  const module=window.lnTools?.[active];if(!module){$('#toolsPanel').textContent='Dit onderdeel kon niet laden. Ververs de pagina.';return;}
- if(mountedTool!==active){if(mountedTool)window.lnTools[mountedTool]?.close?.();resetToolHost();mountedTool=active;const opening=active;Promise.resolve(module.open($('#toolsPanel'),identity)).catch(()=>{if(mountedTool===opening)$('#toolsPanel').textContent='Dit onderdeel kon niet laden. Open het opnieuw.';});}
+ if(mountedTool!==active){if(mountedTool)window.lnTools[mountedTool]?.close?.();resetToolHost();mountedTool=active;const opening=active;Promise.resolve(module.open($('#toolsPanel'),identity)).catch(()=>{if(mountedTool===opening)$('#toolsPanel').textContent='Dit onderdeel kon niet laden. Open het opnieuw.';});}else{module.route?.();module.resume?.();}
 }
 window.lnRequireLogin=()=>{clearTools();return loadIdentity();};
 let botSettingsData=null,botSettingsDirty=false,botSettingsBusy=false,botSettingsRequest=0;
@@ -71,15 +71,46 @@ function query(pageOverride=page){return new URLSearchParams({cat:active,action:
 const canPage=id=>id==='forms'?!!identity?.allowed:['siteactivity','botsettings','studio','permissions'].includes(id)?!!identity?.admin:!!identity?.pages?.includes(id);
 const pageRoute=id=>toolPages[id]?.hash|| (id==='botsettings'?'#/botinstellingen':id==='warehousestock'?'#/loodsen':id==='siteactivity'?'#/siteactiviteit':id==='overview'?'#/overzicht':id==='roster'?'#/ledenlijst':id==='safe'?'#/kluis':id==='pots'?'#/potjes':'#/logs/'+id);
 function hidePageLinks(){for(const a of document.querySelectorAll('a[href^="#/logs/"]'))a.hidden=!canPage(a.getAttribute('href').slice(7));}
+const sidebarGroupKeys=['organisation','discord','lanoche','development','management'];
+function sidebarCollapsed(){
+ if(!identity?.admin)return {};
+ const value=read('ln-sidebar-groups:'+identity.id,{});
+ return value&&typeof value==='object'&&!Array.isArray(value)?value:{};
+}
+function sidebarToggle(key,label,collapsed){const short={organisation:'ORG',discord:'DC',lanoche:'LN',development:'DEV',management:'BHR'}[key];return `<button type="button" class="sidebar-group-toggle" data-sidebar-group="${key}" aria-label="${esc(label)}" aria-expanded="${!collapsed}" aria-controls="sidebar-items-${key}"><span class="sidebar-group-label">${esc(label)}</span><span class="sidebar-group-abbr" aria-hidden="true">${short}</span><span class="sidebar-group-chevron" aria-hidden="true">›</span></button>`;}
+function sidebarGroup(key,label,content){
+ if(!content)return '';
+ if(!identity?.admin)return `<div class="navgroup">${esc(label)}</div>${content}`;
+ const collapsed=sidebarCollapsed()[key]===true;
+ return `<div class="sidebar-group">${sidebarToggle(key,label,collapsed)}<div id="sidebar-items-${key}" ${collapsed?'hidden':''}>${content}</div></div>`;
+}
+function managementNavigation(){
+ const heading=$('#managementHeading'),items=$('#managementItems');
+ if(!heading||!items)return;
+ const collapsed=identity?.admin&&sidebarCollapsed().management===true;
+ items.id='managementItems';items.hidden=!!collapsed;
+ const markup=identity?.admin?sidebarToggle('management','Beheer',collapsed).replace('sidebar-items-management','managementItems'):'BEHEER';
+ if(heading.innerHTML!==markup)heading.innerHTML=markup;
+ heading.classList.toggle('sidebar-management-owner',!!identity?.admin);
+}
+function toggleSidebarGroup(event){
+ const button=event.target.closest('[data-sidebar-group]');
+ if(!button||!identity?.admin)return;
+ const key=button.dataset.sidebarGroup;if(!sidebarGroupKeys.includes(key))return;
+ const next={...sidebarCollapsed(),[key]:button.getAttribute('aria-expanded')==='true'};
+ try{localStorage.setItem('ln-sidebar-groups:'+identity.id,JSON.stringify(next));}catch{return;}
+ const scroll=$('#nav').scrollTop;nav();$('#nav').scrollTop=scroll;
+ document.querySelector(`[data-sidebar-group="${key}"]`)?.focus();
+}
+$('.sidebar').addEventListener('click',toggleSidebarGroup);
 function nav(){
  const counts=Object.fromEntries((data?.counts||[]).map(c=>[c.cat,c.n]));let html='';
  if(canPage('overview'))html+=`<a class="navitem ${active==='all'?'active':''}" href="#/overzicht">${icon('grid')}<span class="navtext">Overzicht</span><span class="navcount">${data?Object.values(counts).reduce((a,b)=>a+b,0):'—'}</span></a>`;
- const special=[['roster','Live ledenlijst','users'],['safe','Kluisoverzicht','vault'],['pots','Potjesoverzicht','money'],['warehousestock','Loodsen','warehouse'],['forms','Formulieren','grid']].filter(([id])=>canPage(id));
- if(special.length)html+='<div class="navgroup">Organisatie</div>';
- for(const [id,label,ic] of special)html+=`<a class="navitem ${active===id?'active':''}" href="${pageRoute(id)}">${icon(ic)}<span class="navtext">${label}</span></a>`;
- for(const group of ['Discord','La Noche']){const entries=Object.entries(cats).filter(([key,c])=>c.group===group&&canPage(key));if(!entries.length)continue;html+=`<div class="navgroup">${group}</div>`;for(const [key,c] of entries)html+=`<a class="navitem ${active===key?'active':''}" href="#/logs/${key}">${icon(c.icon)}<span class="navtext">${esc(c.label)}</span><span class="navcount">${data?counts[key]||0:'—'}</span></a>`;}
- if(identity?.admin){html+='<div class="navgroup">Website Development</div>';for(const id of ['studio','permissions'])html+=`<a class="navitem ${active===id?'active':''}" href="${toolPages[id].hash}">${icon(toolPages[id].icon)}<span class="navtext">${esc(toolPages[id].title)}</span></a>`;}
- $('#nav').innerHTML=html;
+ const special=[['roster','Live ledenlijst','users'],['safe','Kluisoverzicht','vault'],['pots','Potjesoverzicht','money'],['warehousestock','Loodsen','warehouse'],['scenarios','Gangpunten & scenario’s','chart'],['forms','Formulieren','grid']].filter(([id])=>canPage(id));
+ html+=sidebarGroup('organisation','Organisatie',special.map(([id,label,ic])=>`<a class="navitem ${active===id?'active':''}" href="${pageRoute(id)}">${icon(ic)}<span class="navtext">${label}</span></a>`).join(''));
+ for(const group of ['Discord','La Noche']){const entries=Object.entries(cats).filter(([key,c])=>c.group===group&&canPage(key));html+=sidebarGroup(group==='Discord'?'discord':'lanoche',group,entries.map(([key,c])=>`<a class="navitem ${active===key?'active':''}" href="#/logs/${key}">${icon(c.icon)}<span class="navtext">${esc(c.label)}</span><span class="navcount">${data?counts[key]||0:'—'}</span></a>`).join(''));}
+ if(identity?.admin)html+=sidebarGroup('development','Website Development',['studio','permissions'].map(id=>`<a class="navitem ${active===id?'active':''}" href="${toolPages[id].hash}">${icon(toolPages[id].icon)}<span class="navtext">${esc(toolPages[id].title)}</span></a>`).join(''));
+ if($('#nav').innerHTML!==html)$('#nav').innerHTML=html;managementNavigation();
 }
 const chartHourFormatter=new Intl.DateTimeFormat('nl-NL',{timeZone:'Europe/Amsterdam',hour:'2-digit',hourCycle:'h23'});
 const fmtTime=t=>new Date(t).toLocaleString('nl-NL',{timeZone:'Europe/Amsterdam',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'});
@@ -128,7 +159,7 @@ async function refresh(){
  finally{clearTimeout(timeout);if(my===serial&&!paused&&connection)timer=setTimeout(refresh,interval);}
 }
 function route(){
- const m=location.hash.match(/^#\/logs\/(\w+)$/);active=Object.keys(toolPages).find(key=>toolPages[key].hash===location.hash)|| (location.hash==='#/botinstellingen'?'botsettings':location.hash==='#/loodsen'?'warehousestock':location.hash==='#/siteactiviteit'?'siteactivity':location.hash==='#/potjes'?'pots':location.hash==='#/kluis'?'safe':location.hash==='#/ledenlijst'?'roster':m&&cats[m[1]]?m[1]:'all');actionFilter='all';page=1;data=null;$('#search').value='';
+ const m=location.hash.match(/^#\/logs\/(\w+)$/);active=(/^#\/scenarios\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(location.hash)?'scenarios':Object.keys(toolPages).find(key=>toolPages[key].hash===location.hash))|| (location.hash==='#/botinstellingen'?'botsettings':location.hash==='#/loodsen'?'warehousestock':location.hash==='#/siteactiviteit'?'siteactivity':location.hash==='#/potjes'?'pots':location.hash==='#/kluis'?'safe':location.hash==='#/ledenlijst'?'roster':m&&cats[m[1]]?m[1]:'all');actionFilter='all';page=1;data=null;$('#search').value='';
  const requested=active==='all'?'overview':active;
  if(!canPage(requested)){
   const next=identity?.pages?.[0]||(identity?.allowed?'forms':null);if(next){location.hash=pageRoute(next);return;}
@@ -184,7 +215,7 @@ let searchTimer;$('#search').oninput=()=>{clearTimeout(searchTimer);searchTimer=
 $('#pause').onclick=()=>{paused=!paused;$('#pauseLabel').textContent=paused?'Gepauzeerd':'Live updates';$('#pause').querySelector('[data-icon]').innerHTML=icon(paused?'play':'pause');if(paused){clearTimeout(timer);status('Automatische updates gepauzeerd');}else refresh();};
 $('#settings').onclick=()=>{$('#theme').value=theme;$('#interval').value=String(interval);$('#preferences').showModal();};$('#closeprefs').onclick=()=>$('#preferences').close();$('#saveprefs').onclick=()=>{theme=$('#theme').value;interval=Number($('#interval').value);localStorage.setItem('ln-theme',JSON.stringify(theme));localStorage.setItem('ln-interval',JSON.stringify(interval));applyTheme();$('#preferences').close();refresh();};$('#disconnect').onclick=logout;
 $('#export').textContent='Exporteer deze pagina';$('#export').onclick=()=>{const cell=v=>'"'+String(v??'').replace(/^[=+@-]/,"'$&").replaceAll('"','""')+'"';const csv=['ID;Categorie;Actie;Uitvoerder;Lid;Kanaal;Tijd;Details',...data.logs.map(l=>[l.id,l.cat,l.action,l.actor,l.user,l.channel,new Date(l.time).toISOString(),l.detail].map(cell).join(';'))].join('\r\n');const url=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download='la-noche-logs-pagina-'+page+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);toast(`${data.logs.length} logs van deze pagina geëxporteerd`);};
-document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='k'){e.preventDefault();(active==='botsettings'?$('#botSettingsFields [data-bot-key]')||$('#botSettingsReload'):active==='warehousestock'?$('#warehouseSearch'):active==='roster'?$('#memberSearch'):$('#search')).focus();}if(e.key==='Escape')closeDetail();if(e.key==='Tab'&&!$('#drawer').hidden){const items=$('#drawer').querySelectorAll('button,a');if(e.shiftKey&&document.activeElement===items[0]){e.preventDefault();items[items.length-1].focus();}else if(!e.shiftKey&&document.activeElement===items[items.length-1]){e.preventDefault();items[0].focus();}}});
+document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='k'){e.preventDefault();(active==='scenarios'?$('#toolsPanel .scenarios-search input'):active==='botsettings'?$('#botSettingsFields [data-bot-key]')||$('#botSettingsReload'):active==='warehousestock'?$('#warehouseSearch'):active==='roster'?$('#memberSearch'):$('#search')).focus();}if(e.key==='Escape')closeDetail();if(e.key==='Tab'&&!$('#drawer').hidden){const items=$('#drawer').querySelectorAll('button,a');if(e.shiftKey&&document.activeElement===items[0]){e.preventDefault();items[items.length-1].focus();}else if(!e.shiftKey&&document.activeElement===items[items.length-1]){e.preventDefault();items[0].focus();}}});
 window.addEventListener('hashchange',route);$('#date').textContent=new Date().toLocaleDateString('nl-NL');$('#year').textContent=new Date().getFullYear();loadIdentity();
 
 let accountPageOptions=[];
@@ -195,7 +226,7 @@ async function loadAccounts(){
  if(!$('#newAccountPages').children.length)$('#newAccountPages').innerHTML=pageChecks();
  $('#accountList').innerHTML=`<div class="account-row"><div><b>Vaste beheerder</b><small>${esc(result.owner)}</small></div><span class="detailbadge">Alle pagina’s · vast</span></div>`+result.users.map(u=>`<details class="account-editor"><summary><span><b>${esc(u.label||'Account zonder interne naam')}</b><small>${esc(u.user)}</small></span><span class="detailbadge">${u.pages.length} / ${accountPageOptions.length} pagina’s</span></summary><form data-account="${esc(u.user)}"><label>Interne naam<input name="label" maxlength="80" value="${esc(u.label)}" placeholder="Naam voor jouw overzicht" autocomplete="off"></label><fieldset class="account-pages"><legend>Toegestane pagina’s</legend><div class="account-bulk"><button class="button" type="button" data-check="all">Alles selecteren</button><button class="button" type="button" data-check="none">Alles uitzetten</button></div><div class="page-options">${pageChecks(u.pages)}</div></fieldset><div class="account-bulk"><button class="button accent" type="submit">Naam en pagina’s opslaan</button><button class="button" type="button" data-remove="${esc(u.user)}">Account verwijderen</button></div><p class="account-result" role="status"></p></form></details>`).join('');
 }
-$('#accountsButton').onclick=async()=>{$('#accountsDialog').showModal();document.documentElement.dataset.accountEditor='open';clearTimeout(timer);request?.abort();++serial;$('#accountMessage').textContent='Laden…';try{await loadAccounts();$('#accountMessage').textContent='';}catch(e){$('#accountMessage').textContent=e.message;}};
+$('#accountsButton').onclick=async()=>{$('#accountsDialog').showModal();document.documentElement.dataset.accountEditor='open';if(mountedTool)window.lnTools?.[mountedTool]?.suspend?.();clearTimeout(timer);request?.abort();++serial;$('#accountMessage').textContent='Laden…';try{await loadAccounts();$('#accountMessage').textContent='';}catch(e){$('#accountMessage').textContent=e.message;}};
 $('#closeAccounts').onclick=()=>$('#accountsDialog').close();
 $('#accountsDialog').addEventListener('close',()=>{delete document.documentElement.dataset.accountEditor;if(connection&&!paused)refresh();});
 document.addEventListener('visibilitychange',()=>{if(document.hidden){clearTimeout(timer);request?.abort();++serial;}else if(connection&&!paused)refresh();});
