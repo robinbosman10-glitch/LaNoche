@@ -16,29 +16,13 @@ const marker=index=>`LA NOCHE • Puntenlijst • Pagina ${index+1} • Automati
 const pendingKey=guild=>`points-list-pending:${guild}`;
 const messageUrl=(guild,ids)=>`https://discord.com/channels/${guild}/${pointsChannel}/${ids[0]}`;
 
-// A member appears once, under their highest gang rank. Personal points are
-// participation totals; adding them together does not produce the gang total.
+// Gang roles determine membership only; the display is one list without rank sections.
+// Personal participation totals do not add up to the gang total.
 export function pointsDescriptions(members,ranks,summary){
  const points=new Map(summary.members.map(member=>[member.id,member.points]));
- const groups=new Map([...ranks].reverse().map(id=>[id,[]]));
- for(const member of members.values()){
-  if(member.user?.bot||member.roles.cache.has(blacklistRole))continue;
-  const rank=[...groups.keys()].find(id=>member.roles.cache.has(id));
-  if(rank)groups.get(rank).push(member);
- }
- const blocks=[];
- for(const [rank,group] of groups){
-  group.sort((a,b)=>(points.get(b.id)||0)-(points.get(a.id)||0)||a.displayName.localeCompare(b.displayName,'nl')||a.id.localeCompare(b.id));
-  const heading=`### <@&${rank}> • ${group.length}`;
-  if(!group.length){blocks.push(`${heading}\n*Geen leden op deze rang.*`);continue;}
-  let block=heading;
-  for(const member of group){
-   const line=`<@${member.id}> — **${format(points.get(member.id))} punten**`;
-   if(block.length+line.length+1>2800){blocks.push(block);block=`### <@&${rank}> (vervolg)`;}
-   block+='\n'+line;
-  }
-  blocks.push(block);
- }
+ const listed=[...members.values()].filter(member=>!member.user?.bot&&!member.roles.cache.has(blacklistRole)&&ranks.some(id=>member.roles.cache.has(id)));
+ listed.sort((a,b)=>(points.get(b.id)||0)-(points.get(a.id)||0)||a.displayName.localeCompare(b.displayName,'nl')||a.id.localeCompare(b.id));
+ const blocks=listed.length?listed.map(member=>`<@${member.id}> **[${format(points.get(member.id))}]**`):['*Nog geen gangleden gevonden.*'];
  const intro=`**GANGTOTAAL · ${format(summary.points)} punten**\nIedere aanwezige krijgt de volledige scenariopunten. Het gangtotaal telt elk scenario één keer.${summary.resetAt?`\nHuidige periode sinds <t:${Math.floor(summary.resetAt/1000)}:d>.`:''}`;
  const pages=[];let page=intro;
  for(const block of blocks){
@@ -75,9 +59,7 @@ export async function updatePointsList(guild,store){
   const botMember=guild.members.me||await guild.members.fetchMe();
   if(channel?.guildId!==guild.id||!channel?.send||!channel.permissionsFor(botMember)?.has([P.ViewChannel,send,P.EmbedLinks,P.AttachFiles,P.ReadMessageHistory]))throw new UserError('Ik mis rechten in het puntenlijst-kanaal (bekijken, versturen, embeds, bestanden of berichtgeschiedenis).');
   const members=await getMembers(guild);
-  await guild.roles.fetch();
   const ranks=settings.memberlistRanks||settings.ranks;
-  if(ranks.some(id=>!guild.roles.cache.has(id)))throw new UserError('Eén of meer gangrangen voor de puntenlijst bestaan niet in deze server.');
   const saved=store.pointsList(guild.id);
   const ids=saved?.channel===pointsChannel?[...saved.messages]:[];
   const pendingRaw=store.getMeta(pendingKey(guild.id));

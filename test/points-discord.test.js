@@ -27,13 +27,13 @@ function fixture(t){
  return {store,meta,members,messages,sends,edits,errors,channel,guild,client,interaction,scenario,fetches,setSendError:e=>{sendError=e;},setFetchError:e=>{fetchError=e;}};
 }
 
-test('points list uses highest rank once, includes zero members, excludes bots and blacklist',()=>{
+test('points list has one spaced name-and-points row per member without rank sections',()=>{
  const blocked=member('424086753327054852','Blocked',[high,blacklistRole]);
  const robot=member('424086753327054853','Bot',[high]);robot.user.bot=true;
  const members=new Collection([[owner,member(owner,'Robin',[low,high])],[other,member(other,'Milan')],[blocked.id,blocked],[robot.id,robot]]);
  const pages=pointsDescriptions(members,[low,high],{points:20,members:[{id:owner,points:20}],resetAt:null});
  const content=pages.join('\n');assert.equal(content.match(new RegExp(`<@${owner}>`,'g')).length,1);
- assert.ok(content.indexOf(`<@&${high}>`)<content.indexOf(`<@${owner}>`));assert.match(content,new RegExp(`<@${other}> — \\*\\*0 punten\\*\\*`));assert.ok(!content.includes(blocked.id)&&!content.includes(robot.id));
+ assert.ok(!content.includes('<@&'));assert.ok(content.includes(`<@${owner}> **[20]**\n\n<@${other}> **[0]**`));assert.ok(!content.includes(blocked.id)&&!content.includes(robot.id));
  assert.match(content,/GANGTOTAAL · 20 punten/);
 });
 test('large points list stays within Discord embed limits without omitting anyone',()=>{
